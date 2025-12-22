@@ -57,31 +57,34 @@ Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(
 // ==========================================
 // 🛠️ EMERGENCY ROUTE: CREATE FLOOR PLANS TABLE
 // ==========================================
-Route::get('/fix-promos', function () {
-    // 1. Cek apakah tabel 'promos' ada?
-    if (!Schema::hasTable('promos')) {
-        Schema::create('promos', function (Blueprint $table) {
-            $table->id();
-            $table->string('title');
-            $table->string('slug')->nullable(); // Kita buat nullable dulu biar aman
-            $table->string('code')->unique();
-            $table->enum('type', ['fixed', 'percent']);
-            $table->decimal('discount_amount', 10, 2);
-            $table->text('description')->nullable();
-            $table->string('image')->nullable();
-            $table->date('start_date');
-            $table->date('end_date');
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-        });
-        return "✅ SUKSES! Tabel 'promos' baru saja dibuat.";
+Route::get('/fix-users-table', function () {
+    $status = [];
+
+    // 1. Cek & Buat Kolom 'username'
+    if (!Schema::hasColumn('users', 'username')) {
+        DB::statement("ALTER TABLE users ADD COLUMN username VARCHAR(255) NULL AFTER name");
+        // Isi username kosong dengan data dari email supaya tidak error
+        DB::statement("UPDATE users SET username = CONCAT(SUBSTRING_INDEX(email, '@', 1), FLOOR(RAND() * 1000)) WHERE username IS NULL");
+        $status[] = "✅ Kolom 'username' BERHASIL ditambahkan.";
+    } else {
+        $status[] = "ℹ️ Kolom 'username' sudah ada.";
     }
 
-    // 2. Jika tabel ada, Cek apakah kolom 'slug' ada?
-    if (!Schema::hasColumn('promos', 'slug')) {
-        DB::statement("ALTER TABLE promos ADD COLUMN slug VARCHAR(255) NULL AFTER title");
-        return "✅ SUKSES! Kolom 'slug' berhasil ditambahkan ke tabel promos.";
+    // 2. Cek & Buat Kolom 'points'
+    if (!Schema::hasColumn('users', 'points')) {
+        DB::statement("ALTER TABLE users ADD COLUMN points INT DEFAULT 0 AFTER role");
+        $status[] = "✅ Kolom 'points' BERHASIL ditambahkan.";
+    } else {
+        $status[] = "ℹ️ Kolom 'points' sudah ada.";
     }
 
-    return "ℹ️ Tabel & Kolom Promo aman. Masalahnya mungkin di Controller.";
+    // 3. Cek & Buat Kolom 'role' (Just in case)
+    if (!Schema::hasColumn('users', 'role')) {
+        DB::statement("ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'user' AFTER email");
+        $status[] = "✅ Kolom 'role' BERHASIL ditambahkan.";
+    } else {
+        $status[] = "ℹ️ Kolom 'role' sudah ada.";
+    }
+
+    return implode('<br>', $status) . "<br><br>👉 <b>Selesai! Sekarang coba Add User lagi di Admin Panel.</b>";
 });
