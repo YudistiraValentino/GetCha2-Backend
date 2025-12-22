@@ -3,7 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use App\Models\User; 
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB; // 👈 KITA PAKAI INI SEKARANG (SQL MURNI)
+use Illuminate\Support\Facades\DB; 
+use Illuminate\Database\Schema\Blueprint; // 👈 Import ini penting buat bikin tabel
 
 // Import Controller Admin
 use App\Http\Controllers\Admin\ProductController;
@@ -23,25 +24,18 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
-// ==========================================
-// 🔓 GUEST ROUTES (Login Admin)
-// ==========================================
+// 🔓 GUEST ROUTES
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-
-// ==========================================
-// 🔒 PROTECTED ROUTES (Harus Login Admin)
-// ==========================================
+// 🔒 PROTECTED ROUTES
 Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(function () {
     
-    // Dashboard
     Route::get('/', function () {
         return redirect()->route('admin.orders.index');
     })->name('dashboard');
 
-    // MODULES
     Route::resource('products', ProductController::class);
     
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
@@ -61,30 +55,24 @@ Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(
 });
 
 // ==========================================
-// 🛠️ JURUS PAMUNGKAS: FIX ROLE (RAW SQL)
+// 🛠️ EMERGENCY ROUTE: CREATE FLOOR PLANS TABLE
 // ==========================================
-Route::get('/fix-role', function () {
+Route::get('/fix-maps', function () {
     
-    // 1. Cek Kolom pakai Schema (aman)
-    if (!Schema::hasColumn('users', 'role')) {
-        // 2. Buat Kolom Pakai RAW SQL (Anti Error Type Hint)
-        // Kita perintahkan MySQL langsung: "Woi, tambah kolom role dong!"
-        DB::statement("ALTER TABLE users ADD COLUMN role VARCHAR(255) DEFAULT 'user' AFTER email");
-        $status = "✅ Kolom 'role' BERHASIL dibuat manual via SQL.";
-    } else {
-        $status = "ℹ️ Kolom 'role' sudah ada.";
-    }
+    // Cek apakah tabel sudah ada?
+    if (!Schema::hasTable('floor_plans')) {
+        
+        // Buat Tabel Baru
+        Schema::create('floor_plans', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');         // Nama Map (misal: Lantai 1)
+            $table->string('image_path');   // URL Gambar
+            $table->boolean('is_active')->default(false); // Status aktif
+            $table->timestamps();           // created_at & updated_at
+        });
 
-    // 3. Cari User & Update
-    $email = 'yudis@getcha.com'; 
-    // Kita update pakai query builder biasa biar gak kena validasi model user
-    $affected = DB::table('users')
-        ->where('email', $email)
-        ->update(['role' => 'admin']);
+        return "✅ SUKSES! Tabel 'floor_plans' BERHASIL dibuat.";
+    } 
 
-    if ($affected) {
-        return "$status <br> ✅ SUKSES! User $email sekarang jadi ADMIN. <br><br> <a href='/login'>KLIK DISINI UNTUK LOGIN ADMIN</a>";
-    } else {
-        return "$status <br> ❌ User $email tidak ditemukan. Cek lagi emailnya.";
-    }
+    return "ℹ️ Tabel 'floor_plans' SUDAH ADA. Tidak perlu dibuat lagi.";
 });

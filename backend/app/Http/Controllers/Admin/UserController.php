@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB; 
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash; // 👈 WAJIB ADA: Untuk enkripsi password
 
 class UserController extends Controller
 {
@@ -23,6 +24,51 @@ class UserController extends Controller
     }
 
     /**
+     * POST /api/admin/users
+     * Menyimpan User Baru (Customer)
+     * ✅ PERBAIKAN: Auto Generate Username & Hash Password
+     */
+    public function store(Request $request)
+    {
+        // 1. Validasi Input (Username tidak divalidasi karena auto-generate)
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|min:8',
+        ]);
+
+        try {
+            // 2. Generate Username Otomatis
+            // Ambil teks sebelum @ di email, lalu tambah 3 angka acak
+            // Contoh: yudis@getcha.com -> yudis843
+            $usernameBase = explode('@', $request->email)[0];
+            $username = $usernameBase . rand(100, 999);
+
+            // 3. Simpan ke Database
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'username' => $username, // ✅ Solusi error "Field username doesn't have default value"
+                'password' => Hash::make($request->password), // ✅ Password wajib di-hash
+                'role' => 'user', // Default role customer/user
+                'points' => 0, // Default poin 0
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Customer berhasil dibuat!',
+                'data' => $user
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal membuat user: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * GET /api/admin/users/{id}/stats
      * Mengambil statistik user (Total belanja & Favorite Item)
      */
@@ -32,8 +78,6 @@ class UserController extends Controller
         if (!$user) return response()->json(['success' => false, 'message' => 'User not found'], 404);
 
         // --- LOGIC STATISTIK ---
-        // Mencocokkan nama user dengan customer_name di tabel orders
-        // (Idealnya pakai user_id, tapi kita ikuti struktur database kamu saat ini)
         $userName = $user->name; 
 
         // 1. Hitung Total Order
@@ -46,7 +90,7 @@ class UserController extends Controller
         $freqCount = 0;
 
         try {
-            // Cek apakah tabel order_items ada
+            // Cek apakah tabel order_items ada (untuk keamanan jika migrasi belum jalan)
             if (\Schema::hasTable('order_items')) {
                 // Query Agregat untuk cari item paling sering dibeli
                 $favorite = DB::table('order_items')
