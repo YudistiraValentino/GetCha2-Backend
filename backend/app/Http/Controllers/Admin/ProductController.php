@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use Illuminate\Support\Str;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Product;
@@ -77,6 +78,7 @@ class ProductController extends Controller
             // 2. Simpan Data Utama
             $product = Product::create([
                 'name' => $request->name,
+                'slug' => Str::slug($request->name),
                 'category_id' => $request->category_id,
                 'description' => $request->description,
                 'price' => $request->price,
