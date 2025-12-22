@@ -57,22 +57,31 @@ Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(
 // ==========================================
 // 🛠️ EMERGENCY ROUTE: CREATE FLOOR PLANS TABLE
 // ==========================================
-Route::get('/fix-maps', function () {
-    
-    // Cek apakah tabel sudah ada?
-    if (!Schema::hasTable('floor_plans')) {
-        
-        // Buat Tabel Baru
-        Schema::create('floor_plans', function (Blueprint $table) {
+Route::get('/fix-promos', function () {
+    // 1. Cek apakah tabel 'promos' ada?
+    if (!Schema::hasTable('promos')) {
+        Schema::create('promos', function (Blueprint $table) {
             $table->id();
-            $table->string('name');         // Nama Map (misal: Lantai 1)
-            $table->string('image_path');   // URL Gambar
-            $table->boolean('is_active')->default(false); // Status aktif
-            $table->timestamps();           // created_at & updated_at
+            $table->string('title');
+            $table->string('slug')->nullable(); // Kita buat nullable dulu biar aman
+            $table->string('code')->unique();
+            $table->enum('type', ['fixed', 'percent']);
+            $table->decimal('discount_amount', 10, 2);
+            $table->text('description')->nullable();
+            $table->string('image')->nullable();
+            $table->date('start_date');
+            $table->date('end_date');
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
         });
+        return "✅ SUKSES! Tabel 'promos' baru saja dibuat.";
+    }
 
-        return "✅ SUKSES! Tabel 'floor_plans' BERHASIL dibuat.";
-    } 
+    // 2. Jika tabel ada, Cek apakah kolom 'slug' ada?
+    if (!Schema::hasColumn('promos', 'slug')) {
+        DB::statement("ALTER TABLE promos ADD COLUMN slug VARCHAR(255) NULL AFTER title");
+        return "✅ SUKSES! Kolom 'slug' berhasil ditambahkan ke tabel promos.";
+    }
 
-    return "ℹ️ Tabel 'floor_plans' SUDAH ADA. Tidak perlu dibuat lagi.";
+    return "ℹ️ Tabel & Kolom Promo aman. Masalahnya mungkin di Controller.";
 });
