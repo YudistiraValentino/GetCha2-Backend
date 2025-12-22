@@ -1,8 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Hash; // 👈 TAMBAHAN: Untuk Hash Password
-use App\Models\User; // 👈 TAMBAHAN: Untuk cari User
+use App\Models\User; // 👈 PENTING: Tambahan biar bisa edit user
 
 // Import Controller Admin
 use App\Http\Controllers\Admin\ProductController;
@@ -26,7 +25,6 @@ Route::get('/', function () {
 // ==========================================
 // 🔓 GUEST ROUTES (Login Admin)
 // ==========================================
-// Route ini yang dicari Laravel saat error "Route [login] not defined"
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
@@ -37,7 +35,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 // ==========================================
 Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(function () {
     
-    // Dashboard (Bisa diarahkan ke orders atau products)
+    // Dashboard
     Route::get('/', function () {
         return redirect()->route('admin.orders.index');
     })->name('dashboard');
@@ -66,24 +64,20 @@ Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(
 });
 
 // ==========================================
-// 🛠️ EMERGENCY ROUTE: FIX PASSWORD ADMIN
+// 🛠️ EMERGENCY ROUTE: FIX ROLE ADMIN
 // ==========================================
-// Route ini akan mengubah password text biasa menjadi Hash
-Route::get('/fix-admin', function () {
-    // 1. Masukkan Email Admin yang tadi Error
+Route::get('/fix-role', function () {
+    // 1. Cari User
     $email = 'yudis@getcha.com'; 
-    
-    // 2. Cari Usernya
     $user = User::where('email', $email)->first();
 
     if (!$user) {
-        return "User dengan email $email tidak ditemukan di database!";
+        return "User dengan email $email tidak ditemukan!";
     }
 
-    // 3. Update password dengan Hash yang benar
-    // Password baru tetap '12345678', tapi versi aman
-    $user->password = Hash::make('12345678'); 
+    // 2. Set Role jadi admin
+    $user->role = 'admin'; 
     $user->save();
 
-    return "SUKSES! Password untuk $email sudah diperbaiki (di-hash). Silakan coba login di Frontend Vercel sekarang.";
+    return "SUKSES! User $email sekarang memiliki Role: " . $user->role . ". Silakan Login kembali di Frontend.";
 });
