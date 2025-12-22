@@ -67,17 +67,28 @@ Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(
 // 🛠️ EMERGENCY ROUTE: FIX ROLE ADMIN
 // ==========================================
 Route::get('/fix-role', function () {
-    // 1. Cari User
+    // 1. Cek apakah kolom 'role' sudah ada? Kalau belum, kita buat PAKSA.
+    if (!Schema::hasColumn('users', 'role')) {
+        Schema::table('users', function (Blueprint $table) {
+            // Kita buat kolom role tipe string, default 'user'
+            $table->string('role')->default('user')->after('email');
+        });
+        $statusKolom = "✅ Kolom 'role' BERHASIL dibuat.";
+    } else {
+        $statusKolom = "ℹ️ Kolom 'role' sudah ada.";
+    }
+
+    // 2. Cari User & Update jadi Admin
     $email = 'yudis@getcha.com'; 
     $user = User::where('email', $email)->first();
 
     if (!$user) {
-        return "User dengan email $email tidak ditemukan!";
+        return "$statusKolom <br> ❌ TAPI User $email tidak ditemukan!";
     }
 
-    // 2. Set Role jadi admin
+    // Update role
     $user->role = 'admin'; 
     $user->save();
 
-    return "SUKSES! User $email sekarang memiliki Role: " . $user->role . ". Silakan Login kembali di Frontend.";
+    return "$statusKolom <br> ✅ SUKSES! User $email sekarang jadi ADMIN. Silakan Login.";
 });
