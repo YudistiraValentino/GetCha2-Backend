@@ -19,7 +19,7 @@ return [
 
 'allowed_methods' => ['*'],
 
-'allowed_origins' => ['http://localhost:3000'], // <--- Pastikan ini URL Next.js kamu
+'allowed_origins' => ['*'], // <--- Pastikan ini URL Next.js kamu
 
 'allowed_origins_patterns' => [],
 

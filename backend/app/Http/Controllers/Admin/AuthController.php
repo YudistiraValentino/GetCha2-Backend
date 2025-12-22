@@ -5,10 +5,22 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
-use Illuminate\Support\Facades\Hash; // 👈 Kita pakai Hash manual
+use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
+    /**
+     * Fix Error 500: Menangani jika user mengakses /login via Browser (GET)
+     */
+    public function showLoginForm()
+    {
+        return response()->json([
+            'status' => 'running',
+            'message' => 'Backend Server Berjalan! Gunakan POST request untuk Login.',
+            'timestamp' => now()
+        ]);
+    }
+
     public function login(Request $request)
     {
         $request->validate([
@@ -28,7 +40,6 @@ class AuthController extends Controller
         }
 
         // 2. Debug: Cek Password Manual pakai Hash::check
-        // Ini lebih akurat daripada Auth::attempt untuk API
         if (!Hash::check($request->password, $user->password)) {
             return response()->json([
                 'success' => false,
