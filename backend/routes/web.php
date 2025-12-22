@@ -1,7 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Models\User; // 👈 PENTING: Tambahan biar bisa edit user
+use App\Models\User; 
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB; // 👈 KITA PAKAI INI SEKARANG (SQL MURNI)
 
 // Import Controller Admin
 use App\Http\Controllers\Admin\ProductController;
@@ -18,7 +20,6 @@ use App\Http\Controllers\Admin\FloorPlanController;
 */
 
 Route::get('/', function () {
-    // Redirect root ke login admin saja biar gak bingung
     return redirect()->route('login');
 });
 
@@ -40,55 +41,50 @@ Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(
         return redirect()->route('admin.orders.index');
     })->name('dashboard');
 
-    // 1. MODULE PRODUCTS
+    // MODULES
     Route::resource('products', ProductController::class);
-
-    // 2. MODULE ORDERS
+    
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus'])->name('orders.updateStatus');
     Route::get('/orders/{id}/print', [OrderController::class, 'printStruk'])->name('orders.print');
 
-    // 3. MODULE DEALS / PROMO
     Route::resource('promos', PromoController::class);
 
-    // 4. MODULE CUSTOMERS / USERS
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::post('/users/{id}/points', [UserController::class, 'updatePoints'])->name('users.updatePoints');
     Route::get('/users/{id}/stats', [UserController::class, 'getUserStats'])->name('users.stats');
 
-    // MODULE MAPS / FLOOR PLAN
     Route::resource('maps', FloorPlanController::class)->only(['index', 'store', 'destroy']);
     Route::post('/maps/{id}/activate', [FloorPlanController::class, 'activate'])->name('maps.activate');
 
 });
 
 // ==========================================
-// 🛠️ EMERGENCY ROUTE: FIX ROLE ADMIN
+// 🛠️ JURUS PAMUNGKAS: FIX ROLE (RAW SQL)
 // ==========================================
 Route::get('/fix-role', function () {
-    // 1. Cek apakah kolom 'role' sudah ada? Kalau belum, kita buat PAKSA.
+    
+    // 1. Cek Kolom pakai Schema (aman)
     if (!Schema::hasColumn('users', 'role')) {
-        Schema::table('users', function (Blueprint $table) {
-            // Kita buat kolom role tipe string, default 'user'
-            $table->string('role')->default('user')->after('email');
-        });
-        $statusKolom = "✅ Kolom 'role' BERHASIL dibuat.";
+        // 2. Buat Kolom Pakai RAW SQL (Anti Error Type Hint)
+        // Kita perintahkan MySQL langsung: "Woi, tambah kolom role dong!"
+        DB::statement("ALTER TABLE users ADD COLUMN role VARCHAR(255) DEFAULT 'user' AFTER email");
+        $status = "✅ Kolom 'role' BERHASIL dibuat manual via SQL.";
     } else {
-        $statusKolom = "ℹ️ Kolom 'role' sudah ada.";
+        $status = "ℹ️ Kolom 'role' sudah ada.";
     }
 
-    // 2. Cari User & Update jadi Admin
+    // 3. Cari User & Update
     $email = 'yudis@getcha.com'; 
-    $user = User::where('email', $email)->first();
+    // Kita update pakai query builder biasa biar gak kena validasi model user
+    $affected = DB::table('users')
+        ->where('email', $email)
+        ->update(['role' => 'admin']);
 
-    if (!$user) {
-        return "$statusKolom <br> ❌ TAPI User $email tidak ditemukan!";
+    if ($affected) {
+        return "$status <br> ✅ SUKSES! User $email sekarang jadi ADMIN. <br><br> <a href='/login'>KLIK DISINI UNTUK LOGIN ADMIN</a>";
+    } else {
+        return "$status <br> ❌ User $email tidak ditemukan. Cek lagi emailnya.";
     }
-
-    // Update role
-    $user->role = 'admin'; 
-    $user->save();
-
-    return "$statusKolom <br> ✅ SUKSES! User $email sekarang jadi ADMIN. Silakan Login.";
 });
