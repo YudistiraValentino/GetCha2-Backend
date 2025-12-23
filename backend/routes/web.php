@@ -152,3 +152,19 @@ Route::get('/fix-maps', function () {
     }
     return "ℹ️ Tabel floor_plans sudah ada.";
 });
+
+Route::get('/fix-storage', function () {
+    try {
+        // Hapus link lama jika ada (agar tidak bentrok)
+        if (is_link(public_path('storage'))) {
+            app('files')->delete(public_path('storage'));
+        }
+        
+        // Buat link baru
+        app('files')->link(storage_path('app/public'), public_path('storage'));
+        
+        return "✅ Storage Link berhasil dibuat!";
+    } catch (\Exception $e) {
+        return "❌ Error: " . $e->getMessage();
+    }
+});
