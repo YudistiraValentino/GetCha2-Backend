@@ -90,7 +90,7 @@ Route::get('/reset-orders-table', function () {
         Schema::dropIfExists('orders');
         Schema::enableForeignKeyConstraints();
 
-        // Buat Tabel Orders Baru LENGKAP
+        // 1. Tabel Orders (Sudah Oke)
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
@@ -105,18 +105,21 @@ Route::get('/reset-orders-table', function () {
             $table->timestamps();
         });
 
-        // Buat Tabel Order Items Baru
+        // 2. Tabel Order Items (Disesuaikan dengan kodingan checkout kamu)
         Schema::create('order_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_id')->constrained('orders')->onDelete('cascade');
+            $table->integer('product_id'); // 👈 TAMBAHKAN INI
             $table->string('product_name');
             $table->integer('quantity');
-            $table->decimal('price', 15, 2);
+            $table->decimal('unit_price', 15, 2); // 👈 UBAH DARI price KE unit_price
+            $table->decimal('subtotal', 15, 2);   // 👈 TAMBAHKAN INI
             $table->string('variants')->nullable();
+            $table->json('modifiers')->nullable(); // 👈 TAMBAHKAN INI (Gunakan JSON)
             $table->timestamps();
         });
 
-        return "✅ MEGA RESET BERHASIL! Tabel 'orders' & 'order_items' sudah sinkron dengan kodingan. Silakan checkout ulang.";
+        return "✅ MEGA RESET V2 SUKSES! Kolom product_id, unit_price, dll sudah ditambahkan.";
     } catch (\Exception $e) {
         return "❌ Gagal: " . $e->getMessage();
     }
