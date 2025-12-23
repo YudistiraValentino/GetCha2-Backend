@@ -88,3 +88,19 @@ Route::get('/fix-users-table', function () {
 
     return implode('<br>', $status) . "<br><br>👉 <b>Selesai! Sekarang coba Add User lagi di Admin Panel.</b>";
 });
+
+
+// Route Darurat buat maksa kolom user_id muncul
+Route::get('/force-migrate-user-id', function () {
+    try {
+        if (!Schema::hasColumn('orders', 'user_id')) {
+            Schema::table('orders', function (Blueprint $table) {
+                $table->foreignId('user_id')->nullable()->after('id')->constrained('users')->onDelete('set null');
+            });
+            return "✅ Kolom 'user_id' BERHASIL dipaksa masuk ke tabel orders.";
+        }
+        return "ℹ️ Kolom 'user_id' sebenarnya sudah ada di database.";
+    } catch (\Exception $e) {
+        return "❌ Error: " . $e->getMessage();
+    }
+});
