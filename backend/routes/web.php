@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Models\User; 
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB; 
-use Illuminate\Database\Schema\Blueprint; // 👈 Import ini penting buat bikin tabel
+use Illuminate\Database\Schema\Blueprint;
 
 // Import Controller Admin
 use App\Http\Controllers\Admin\ProductController;
@@ -55,52 +55,97 @@ Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(
 });
 
 // ==========================================
-// 🛠️ EMERGENCY ROUTE: CREATE FLOOR PLANS TABLE
+// 🛠️ EMERGENCY TOOLS (DANGER ZONE)
 // ==========================================
+
+/**
+ * 1. FIX USER TABLE
+ */
 Route::get('/fix-users-table', function () {
     $status = [];
-
-    // 1. Cek & Buat Kolom 'username'
     if (!Schema::hasColumn('users', 'username')) {
         DB::statement("ALTER TABLE users ADD COLUMN username VARCHAR(255) NULL AFTER name");
-        // Isi username kosong dengan data dari email supaya tidak error
         DB::statement("UPDATE users SET username = CONCAT(SUBSTRING_INDEX(email, '@', 1), FLOOR(RAND() * 1000)) WHERE username IS NULL");
         $status[] = "✅ Kolom 'username' BERHASIL ditambahkan.";
-    } else {
-        $status[] = "ℹ️ Kolom 'username' sudah ada.";
     }
-
-    // 2. Cek & Buat Kolom 'points'
     if (!Schema::hasColumn('users', 'points')) {
         DB::statement("ALTER TABLE users ADD COLUMN points INT DEFAULT 0 AFTER role");
         $status[] = "✅ Kolom 'points' BERHASIL ditambahkan.";
-    } else {
-        $status[] = "ℹ️ Kolom 'points' sudah ada.";
     }
-
-    // 3. Cek & Buat Kolom 'role' (Just in case)
     if (!Schema::hasColumn('users', 'role')) {
         DB::statement("ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'user' AFTER email");
         $status[] = "✅ Kolom 'role' BERHASIL ditambahkan.";
-    } else {
-        $status[] = "ℹ️ Kolom 'role' sudah ada.";
     }
-
-    return implode('<br>', $status) . "<br><br>👉 <b>Selesai! Sekarang coba Add User lagi di Admin Panel.</b>";
+    return count($status) > 0 ? implode('<br>', $status) : "ℹ️ Tabel User sudah up-to-date.";
 });
 
-
-// Route Darurat buat maksa kolom user_id muncul
-Route::get('/force-migrate-user-id', function () {
+/**
+ * 2. MEGA RESET ORDERS (SOLUSI CHECKOUT ERROR)
+ * Mengatasi: Unknown column 'user_id', 'order_number', dll.
+ */
+Route::get('/reset-orders-table', function () {
     try {
-        if (!Schema::hasColumn('orders', 'user_id')) {
-            Schema::table('orders', function (Blueprint $table) {
-                $table->foreignId('user_id')->nullable()->after('id')->constrained('users')->onDelete('set null');
-            });
-            return "✅ Kolom 'user_id' BERHASIL dipaksa masuk ke tabel orders.";
-        }
-        return "ℹ️ Kolom 'user_id' sebenarnya sudah ada di database.";
+        Schema::disableForeignKeyConstraints();
+        Schema::dropIfExists('order_items');
+        Schema::dropIfExists('orders');
+        Schema::enableForeignKeyConstraints();
+
+        // Buat Tabel Orders Baru LENGKAP
+        Schema::create('orders', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
+            $table->string('order_number')->unique();
+            $table->string('customer_name');
+            $table->enum('order_type', ['dine_in', 'take_away']);
+            $table->string('table_number')->nullable();
+            $table->decimal('total_price', 15, 2);
+            $table->string('status')->default('pending');
+            $table->string('payment_status')->default('unpaid');
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+
+        // Buat Tabel Order Items Baru
+        Schema::create('order_items', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('order_id')->constrained('orders')->onDelete('cascade');
+            $table->string('product_name');
+            $table->integer('quantity');
+            $table->decimal('price', 15, 2);
+            $table->string('variants')->nullable();
+            $table->timestamps();
+        });
+
+        return "✅ MEGA RESET BERHASIL! Tabel 'orders' & 'order_items' sudah sinkron dengan kodingan. Silakan checkout ulang.";
     } catch (\Exception $e) {
-        return "❌ Error: " . $e->getMessage();
+        return "❌ Gagal: " . $e->getMessage();
     }
+});
+
+/**
+ * 3. FIX PROMOS (SLUG)
+ */
+Route::get('/fix-promos', function () {
+    if (!Schema::hasColumn('promos', 'slug')) {
+        DB::statement("ALTER TABLE promos ADD COLUMN slug VARCHAR(255) NULL AFTER title");
+        return "✅ Kolom 'slug' berhasil ditambahkan ke promos.";
+    }
+    return "ℹ️ Kolom slug sudah ada.";
+});
+
+/**
+ * 4. FIX MAPS
+ */
+Route::get('/fix-maps', function () {
+    if (!Schema::hasTable('floor_plans')) {
+        Schema::create('floor_plans', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('image_path');
+            $table->boolean('is_active')->default(false);
+            $table->timestamps();
+        });
+        return "✅ Tabel 'floor_plans' dibuat.";
+    }
+    return "ℹ️ Tabel floor_plans sudah ada.";
 });
