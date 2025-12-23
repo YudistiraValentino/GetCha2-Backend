@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -15,11 +16,11 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         // 1. Validasi Input
+        // HAPUS 'username' dan 'confirmed' agar tidak rewel
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'username' => 'required|string|max:255|unique:users',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed', // confirmed cek password_confirmation
+            'password' => 'required|string|min:8', 
         ]);
 
         if ($validator->fails()) {
@@ -30,15 +31,22 @@ class AuthController extends Controller
             ], 422);
         }
 
-        // 2. Buat User Baru
+        // 2. Auto-Generate Username
+        // Ambil nama depan email, tambah angka acak 3 digit
+        $usernameBase = explode('@', $request->email)[0];
+        $username = $usernameBase . rand(100, 999);
+
+        // 3. Buat User Baru
         $user = User::create([
             'name' => $request->name,
-            'username' => $request->username,
             'email' => $request->email,
+            'username' => $username, // 👈 Username dibuat otomatis disini
             'password' => Hash::make($request->password),
+            'role' => 'user', // 👈 Default Role Customer
+            'points' => 0,    // 👈 Default Points 0
         ]);
 
-        // 3. Buat Token
+        // 4. Buat Token
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
@@ -53,6 +61,7 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         // 1. Cek apakah user login pakai Email atau Username
+        // Input dari frontend tetap ditangkap sebagai 'username' (sesuai kodingan frontend mu)
         $loginField = filter_var($request->username, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
 
         // 2. Cek Kredensial (Password benar/salah)
