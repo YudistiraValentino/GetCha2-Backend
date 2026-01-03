@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Models\User; 
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB; 
+use Illuminate\Support\Facades\Hash; // 👈 Penting buat fix password
 use Illuminate\Database\Schema\Blueprint;
 
 // Import Controller Admin
@@ -16,7 +17,7 @@ use App\Http\Controllers\Admin\FloorPlanController;
 
 /*
 |--------------------------------------------------------------------------
-| Web Routes (Admin Panel)
+| Web Routes (Admin Panel & Emergency Tools)
 |--------------------------------------------------------------------------
 */
 
@@ -24,12 +25,12 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
-// 🔓 GUEST ROUTES
+// 🔓 GUEST ROUTES (Web Login)
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-// 🔒 PROTECTED ROUTES
+// 🔒 PROTECTED ROUTES (Web Admin Dashboard)
 Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(function () {
     
     Route::get('/', function () {
@@ -81,7 +82,6 @@ Route::get('/fix-users-table', function () {
 
 /**
  * 2. MEGA RESET ORDERS (SOLUSI CHECKOUT ERROR)
- * Mengatasi: Unknown column 'user_id', 'order_number', dll.
  */
 Route::get('/reset-orders-table', function () {
     try {
@@ -90,7 +90,7 @@ Route::get('/reset-orders-table', function () {
         Schema::dropIfExists('orders');
         Schema::enableForeignKeyConstraints();
 
-        // 1. Tabel Orders (Sudah Oke)
+        // 1. Tabel Orders
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
@@ -105,21 +105,21 @@ Route::get('/reset-orders-table', function () {
             $table->timestamps();
         });
 
-        // 2. Tabel Order Items (Disesuaikan dengan kodingan checkout kamu)
+        // 2. Tabel Order Items
         Schema::create('order_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_id')->constrained('orders')->onDelete('cascade');
-            $table->integer('product_id'); // 👈 TAMBAHKAN INI
+            $table->integer('product_id'); 
             $table->string('product_name');
             $table->integer('quantity');
-            $table->decimal('unit_price', 15, 2); // 👈 UBAH DARI price KE unit_price
-            $table->decimal('subtotal', 15, 2);   // 👈 TAMBAHKAN INI
+            $table->decimal('unit_price', 15, 2); 
+            $table->decimal('subtotal', 15, 2);   
             $table->string('variants')->nullable();
-            $table->json('modifiers')->nullable(); // 👈 TAMBAHKAN INI (Gunakan JSON)
+            $table->json('modifiers')->nullable(); 
             $table->timestamps();
         });
 
-        return "✅ MEGA RESET V2 SUKSES! Kolom product_id, unit_price, dll sudah ditambahkan.";
+        return "✅ MEGA RESET V2 SUKSES! Tabel Order & Items sudah bersih dan strukturnya benar.";
     } catch (\Exception $e) {
         return "❌ Gagal: " . $e->getMessage();
     }
@@ -153,18 +153,38 @@ Route::get('/fix-maps', function () {
     return "ℹ️ Tabel floor_plans sudah ada.";
 });
 
+/**
+ * 5. FIX STORAGE (Gambar 404)
+ */
 Route::get('/fix-storage', function () {
     try {
-        // Hapus link lama jika ada (agar tidak bentrok)
         if (is_link(public_path('storage'))) {
             app('files')->delete(public_path('storage'));
         }
-        
-        // Buat link baru
         app('files')->link(storage_path('app/public'), public_path('storage'));
-        
-        return "✅ Storage Link berhasil dibuat!";
+        return "✅ Storage Link berhasil dibuat/diperbaiki!";
     } catch (\Exception $e) {
         return "❌ Error: " . $e->getMessage();
     }
+});
+
+/**
+ * 6. 🔥 FIX ADMIN PASSWORD (SOLUSI ERROR 500 / BCRYPT)
+ * Jalankan ini SEKALI saja biar bisa login admin.
+ */
+Route::get('/fix-admin-railway', function () {
+    // GANTI email ini dengan email admin kamu
+    $emailTarget = 'admin@example.com'; 
+    
+    $user = User::where('email', $emailTarget)->first();
+    
+    if (!$user) {
+        return '❌ Error: Email ' . $emailTarget . ' tidak ditemukan di Database!';
+    }
+
+    // Reset Password jadi: password123
+    $user->password = Hash::make('password123');
+    $user->save();
+
+    return '✅ BERHASIL! Password untuk ' . $emailTarget . ' sudah diubah jadi: <b>password123</b>. Silakan Login sekarang.';
 });

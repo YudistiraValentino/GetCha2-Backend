@@ -10,13 +10,15 @@ class IsAdmin
 {
     public function handle(Request $request, Closure $next)
     {
-        // Cek apakah sudah login & role-nya admin
+        // 1. Cek Login & Cek Role Admin
         if (Auth::check() && Auth::user()->role === 'admin') {
             return $next($request);
         }
 
-        // Kalau bukan admin, logout paksa & lempar balik
-        Auth::logout();
-        return redirect()->route('login')->withErrors(['email' => 'Anda bukan Admin!']);
+        // 2. Kalau gagal, balikin JSON Error 403 (Bukan Redirect)
+        return response()->json([
+            'success' => false,
+            'message' => 'Access Denied: You are not Admin!',
+        ], 403);
     }
 }

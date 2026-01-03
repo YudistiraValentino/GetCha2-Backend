@@ -3,7 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// --- CONTROLLERS UNTUK USER / PUBLIC ---
+// --- CONTROLLERS ---
 use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\AuthController;
@@ -11,48 +11,44 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\PromoController;
 
-// --- CONTROLLERS UNTUK ADMIN (Diberi Alias agar tidak bentrok) ---
+// --- CONTROLLERS ADMIN ---
 use App\Http\Controllers\Admin\ProductController as AdminProductController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\PromoController as AdminPromoController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\FloorPlanController as AdminMapController;
-use App\Http\Controllers\Admin\AuthController as AdminAuthController; // 👈 NEW: Import Auth Admin
+use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 
-// Import Model
 use App\Models\FloorPlan;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes
+| API Routes (FULL SECURE VERSION)
 |--------------------------------------------------------------------------
 */
 
 // ==========================================
-// 🔓 1. PUBLIC ROUTES (User & Guest)
+// 🔓 1. PUBLIC ROUTES (Bebas Akses)
 // ==========================================
 
 Route::get('/menu', [MenuController::class, 'index']);
 Route::get('/menu/{id}', [MenuController::class, 'show']);
 Route::get('/new-arrivals', [MenuController::class, 'getNewArrivals']);
-
 Route::post('/checkout', [CheckoutController::class, 'store']);
-
-// Auth User Biasa
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
-
-// 👇 NEW: Auth Admin (Login Khusus Admin)
-Route::post('/admin/login', [AdminAuthController::class, 'login']);
-
 Route::get('/promos', [PromoController::class, 'index']); 
 Route::post('/promos/apply', [PromoController::class, 'apply']); 
 
-// Active Map (Untuk Booking Customer)
+// AUTH Public
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/admin/login', [AdminAuthController::class, 'login']);
+
+// Active Map (Booking)
 Route::get('/active-map', function () {
     $map = FloorPlan::where('is_active', true)->first();
     if (!$map) return response()->json(['success' => false, 'message' => 'No active map']);
-
+    
+    // Logic ambil gambar/SVG
     $relativePath = ltrim($map->image_path, '/'); 
     $fullPath = public_path($relativePath);
     $svgContent = file_exists($fullPath) ? file_get_contents($fullPath) : null;
@@ -68,22 +64,17 @@ Route::get('/active-map', function () {
 });
 
 // ==========================================
-// 🔒 2. PROTECTED ROUTES (Harus Login - User & Admin)
+// 🔒 2. USER ROUTES (Wajib Login)
 // ==========================================
 Route::middleware('auth:sanctum')->group(function () {
     
-    // Get User Data (Dipakai User & Admin untuk cek validitas token)
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
 
-    // Logout User Biasa
     Route::post('/logout', [AuthController::class, 'logout']);
-    
-    // 👇 NEW: Logout Admin
     Route::post('/admin/logout', [AdminAuthController::class, 'logout']);
 
-    // User Features
     Route::get('/my-orders', [OrderController::class, 'index']);
     Route::put('/profile/update', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
@@ -91,13 +82,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 // ==========================================
-// 👑 3. ADMIN API ROUTES (New Next.js Admin)
+// 👑 3. ADMIN ROUTES (Wajib Login + Wajib Admin)
 // ==========================================
-// Semua route ini otomatis ada prefix: /api/admin/...
+// Middleware 'is_admin' MENJAGA pintu ini!
 
-Route::prefix('admin')->group(function () {
+Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
     
-    // --- PRODUK (CRUD Lengkap) ---
+    // --- PRODUK ---
     Route::apiResource('products', AdminProductController::class);
 
     // --- ORDERS ---
@@ -105,15 +96,15 @@ Route::prefix('admin')->group(function () {
     Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
     Route::put('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
     
-    // --- PROMOS / DEALS ---
+    // --- PROMOS ---
     Route::apiResource('promos', AdminPromoController::class);
 
-    // --- CUSTOMERS / USERS ---
+    // --- USERS ---
     Route::get('/users', [AdminUserController::class, 'index']);
     Route::get('/users/{id}/stats', [AdminUserController::class, 'getUserStats']);
     Route::post('/users/{id}/points', [AdminUserController::class, 'updatePoints']);
 
-    // --- MAP MANAGER ---
+    // --- MAPS ---
     Route::get('/maps', [AdminMapController::class, 'index']);
     Route::post('/maps', [AdminMapController::class, 'store']);
     Route::post('/maps/{id}/activate', [AdminMapController::class, 'activate']);
