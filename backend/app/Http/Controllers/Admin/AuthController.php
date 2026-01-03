@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
@@ -55,7 +56,8 @@ class AuthController extends Controller
             ], 403);
         }
 
-        // 4. Buat Token
+        // 4. 🔥 PENTING: Hapus token lama & Buat Token Baru
+        $user->tokens()->delete(); // Bersihkan token lama
         $token = $user->createToken('admin-token')->plainTextToken;
 
         return response()->json([
@@ -63,7 +65,7 @@ class AuthController extends Controller
             'message' => 'Login Berhasil',
             'data' => [
                 'user' => $user,
-                'token' => $token
+                'token' => $token // 👈 Frontend butuh ini!
             ]
         ]);
     }

@@ -21,11 +21,13 @@ use App\Http\Controllers\Admin\FloorPlanController;
 |--------------------------------------------------------------------------
 */
 
+// Redirect root ke login
 Route::get('/', function () {
     return redirect()->route('login');
 });
 
-// 🔓 GUEST ROUTES (Web Login)
+// 🔓 GUEST ROUTES (Web Login - Tanpa Middleware Auth)
+// Route ini ada di root: /login
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
@@ -188,50 +190,25 @@ Route::get('/fix-admin-railway', function () {
 
 /**
  * 7. 🔥 FIX CATEGORIES (SOLUSI PRODUCT UNCATEGORIZED)
- * Jalankan ini untuk mengisi tabel categories yang kosong
  */
 Route::get('/fix-categories-db', function () {
-    // 1. Cek tabel
     if (!Schema::hasTable('categories')) {
         return "❌ Tabel 'categories' belum ada. Jalankan migrasi dulu.";
     }
 
-    // 2. Cek apakah kosong
     $count = DB::table('categories')->count();
     
-    // 3. Kalau kosong, isi default (SEKARANG SUDAH PAKAI SLUG)
     if ($count == 0) {
         $now = now();
         DB::table('categories')->insert([
-            [
-                'name' => 'Coffee', 
-                'slug' => 'coffee', 
-                'created_at' => $now, 
-                'updated_at' => $now
-            ],
-            [
-                'name' => 'Non-Coffee', 
-                'slug' => 'non-coffee', 
-                'created_at' => $now, 
-                'updated_at' => $now
-            ],
-            [
-                'name' => 'Food', 
-                'slug' => 'food', 
-                'created_at' => $now, 
-                'updated_at' => $now
-            ],
-            [
-                'name' => 'Snack', 
-                'slug' => 'snack', 
-                'created_at' => $now, 
-                'updated_at' => $now
-            ],
+            ['name' => 'Coffee', 'slug' => 'coffee', 'created_at' => $now, 'updated_at' => $now],
+            ['name' => 'Non-Coffee', 'slug' => 'non-coffee', 'created_at' => $now, 'updated_at' => $now],
+            ['name' => 'Food', 'slug' => 'food', 'created_at' => $now, 'updated_at' => $now],
+            ['name' => 'Snack', 'slug' => 'snack', 'created_at' => $now, 'updated_at' => $now],
         ]);
         return "✅ SUKSES! 4 Kategori Default (Coffee, Non-Coffee, dll) berhasil ditambahkan beserta Slug.";
     }
 
-    // Tampilkan data biar tau ID-nya
     return response()->json([
         'message' => 'Data Kategori Yang Sudah Ada (Gunakan ID ini)',
         'data' => DB::table('categories')->get()
