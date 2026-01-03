@@ -11,9 +11,10 @@ class MenuController extends Controller
     // Ambil Semua Menu
     public function index()
     {
-        $products = Product::leftJoin('categories', 'products.category_id', '=', 'categories.id')
-            ->select('products.*', 'categories.name as category_name')
-            ->with(['variants', 'modifiers']) 
+        // ✅ PERBAIKAN: Gunakan 'with' untuk relasi category, variants, modifiers
+        // Hapus leftJoin yang manual dan ribet
+        $products = Product::with(['category', 'variants', 'modifiers'])
+            ->orderBy('created_at', 'desc') // Urutkan biar rapi
             ->get();
 
         return response()->json([
@@ -25,10 +26,9 @@ class MenuController extends Controller
     // Ambil Detail 1 Menu
     public function show($id)
     {
-        $product = Product::leftJoin('categories', 'products.category_id', '=', 'categories.id')
-            ->select('products.*', 'categories.name as category_name')
-            ->with(['variants', 'modifiers']) 
-            ->where('products.id', $id)
+        // ✅ PERBAIKAN: Gunakan 'with' disini juga
+        $product = Product::with(['category', 'variants', 'modifiers'])
+            ->where('id', $id)
             ->first();
 
         if ($product) {
@@ -41,14 +41,13 @@ class MenuController extends Controller
         return response()->json(['success' => false, 'message' => 'Product not found'], 404);
     }
 
-    // 👇 FUNGSI BARU: Ambil 4 Produk Terbaru (Otomatis)
+    // Ambil 4 Produk Terbaru
     public function getNewArrivals()
     {
-        $products = Product::leftJoin('categories', 'products.category_id', '=', 'categories.id')
-            ->select('products.*', 'categories.name as category_name')
-            ->with(['variants', 'modifiers']) 
-            ->latest() // Urutkan dari yang created_at paling baru
-            ->take(4)  // Ambil cuma 4 biji
+        // ✅ PERBAIKAN: Gunakan 'with' disini juga
+        $products = Product::with(['category', 'variants', 'modifiers'])
+            ->latest() 
+            ->take(4) 
             ->get();
 
         return response()->json([
