@@ -4,8 +4,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Illuminate\Auth\AuthenticationException; // 👈 Import ini
+use Illuminate\Auth\AuthenticationException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -16,26 +15,29 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         
+        // Daftarkan Alias Middleware
         $middleware->alias([
             'is_admin' => \App\Http\Middleware\IsAdmin::class,
         ]);
 
-        // 🔥 OPSI 1: Mencegah Redirect untuk Guest
+        // 🔥 SOLUSI 1: Jangan redirect jika request datang dari API
         $middleware->redirectGuestsTo(function (Request $request) {
             if ($request->is('api/*')) {
-                return null; // Kalau null, Laravel akan lempar AuthenticationException
+                return null; // Ini akan memicu AuthenticationException
             }
             return route('login');
         });
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // 🔥 OPSI 2: Menangkap Error Auth dan paksa jadi JSON
+        
+        // 🔥 SOLUSI 2: Jika Token Salah/Kosong, Paksa Response JSON (Bukan Redirect)
         $exceptions->render(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthenticated (Token Invalid or Expired)',
+                    'message' => 'Unauthenticated. Token Invalid or Expired.',
                 ], 401);
             }
         });
+
     })->create();
