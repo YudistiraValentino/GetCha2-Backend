@@ -5,6 +5,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Illuminate\Auth\AuthenticationException; // 👈 Import ini
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,30 +16,26 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         
-        // 1. Daftarkan Middleware Admin kamu disini
         $middleware->alias([
             'is_admin' => \App\Http\Middleware\IsAdmin::class,
         ]);
 
-        // 2. 🔥 INI OBATNYA! 
-        // Logika: Kalau user akses rute yang ada awalan 'api/*', 
-        // dan dia belum login, jangan redirect kemana-mana (return null).
-        // Laravel otomatis akan ubah null ini jadi error "401 Unauthorized" (JSON).
+        // 🔥 OPSI 1: Mencegah Redirect untuk Guest
         $middleware->redirectGuestsTo(function (Request $request) {
             if ($request->is('api/*')) {
-                return null;
+                return null; // Kalau null, Laravel akan lempar AuthenticationException
             }
             return route('login');
         });
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // Opsional: Biar kalau error 'Not Found' baliknya JSON juga
-        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
+        // 🔥 OPSI 2: Menangkap Error Auth dan paksa jadi JSON
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Resource not found.'
-                ], 404);
+                    'message' => 'Unauthenticated (Token Invalid or Expired)',
+                ], 401);
             }
         });
     })->create();
