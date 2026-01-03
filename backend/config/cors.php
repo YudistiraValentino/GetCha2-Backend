@@ -19,7 +19,11 @@ return [
 
 'allowed_methods' => ['*'],
 
-'allowed_origins' => ['*'], // <--- Pastikan ini URL Next.js kamu
+'allowed_origins' => [
+        'http://localhost:3000',
+        'https://get-cha2-frontend.vercel.app', // 👈 Masukkan Domain Vercel Kamu
+        '*' // Boleh pakai bintang dulu buat testing
+    ],
 
 'allowed_origins_patterns' => [],
 
