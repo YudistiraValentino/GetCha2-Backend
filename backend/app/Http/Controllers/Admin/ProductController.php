@@ -59,7 +59,7 @@ class ProductController extends Controller
             'name' => 'required|string',
             'category_id' => 'required',
             'price' => 'required|numeric',
-            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+            'image' => 'required|image|mimes:jpeg,png,jpg|max:10240',
         ]);
 
         try {
