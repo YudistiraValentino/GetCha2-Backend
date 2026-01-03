@@ -2,12 +2,14 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\DB;
+use App\Models\User;
+use App\Models\FloorPlan;
+use Laravel\Sanctum\PersonalAccessToken; // 👈 Penting buat Manual Check
 
-// --- CONTROLLERS PUBLIC ---
+// --- CONTROLLERS PUBLIC / USER ---
 use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\CheckoutController;
-use App\Http\Controllers\Api\AuthController; // Auth User
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\OrderController; 
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\PromoController;
@@ -18,44 +20,33 @@ use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\PromoController as AdminPromoController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\FloorPlanController as AdminMapController;
-use App\Http\Controllers\Admin\AuthController as AdminAuthController; // Auth Admin
-
-use App\Models\FloorPlan;
+use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes (FULL SECURE VERSION)
+| API Routes (KOMPLIT & AMAN)
 |--------------------------------------------------------------------------
-| URL Prefix: /api
 */
 
 // ==========================================
 // 🔓 1. PUBLIC ROUTES (Bebas Akses)
 // ==========================================
 
-// Menu & Checkout
 Route::get('/menu', [MenuController::class, 'index']);
 Route::get('/menu/{id}', [MenuController::class, 'show']);
 Route::get('/new-arrivals', [MenuController::class, 'getNewArrivals']);
 Route::post('/checkout', [CheckoutController::class, 'store']);
-
-// Promos (Public view)
 Route::get('/promos', [PromoController::class, 'index']); 
 Route::post('/promos/apply', [PromoController::class, 'apply']); 
 
-// Kategori (Buat Dropdown Product)
-Route::get('/categories', function () {
-    return response()->json(DB::table('categories')->select('id', 'name')->get());
-});
-
-// AUTH
+// AUTH Public
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']); // Login User
+Route::post('/login', [AuthController::class, 'login']);
 
-// 🔥 LOGIN ADMIN (PENTING: Frontend Admin nembak kesini)
-Route::post('/admin/login', [AdminAuthController::class, 'login']); 
+// 🔥 ADMIN LOGIN (Penting buat Frontend Admin)
+Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
-// Active Map (Booking - Public)
+// Active Map (Booking - Public View)
 Route::get('/active-map', function () {
     $map = FloorPlan::where('is_active', true)->first();
     if (!$map) return response()->json(['success' => false, 'message' => 'No active map']);
@@ -76,14 +67,15 @@ Route::get('/active-map', function () {
 });
 
 // ==========================================
-// 🔒 2. USER ROUTES (Wajib Login User)
+// 🔒 2. USER ROUTES (Customer Biasa)
 // ==========================================
+// Customer tetap pakai auth:sanctum standar
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+
     Route::post('/logout', [AuthController::class, 'logout']);
-    
     Route::get('/my-orders', [OrderController::class, 'index']);
     Route::put('/profile/update', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
@@ -91,22 +83,47 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
 // ==========================================
-// 👑 3. ADMIN ROUTES (Wajib Login + Wajib Admin)
+// 👑 3. ADMIN ROUTES (MANUAL GUARD)
 // ==========================================
-// Middleware 'auth:sanctum' memastikan Token Valid.
-// Middleware 'is_admin' memastikan Role = admin.
+// Kita pakai Logic Manual khusus Admin biar gak kena error 401 Gaib
 
-Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
+Route::middleware(function ($request, $next) {
     
-    // Cek Token (Ping)
+    // A. Ambil Token dari Header
+    $token = $request->bearerToken();
+    
+    if (!$token) {
+        return response()->json(['message' => 'Token Tidak Terbaca di Server'], 401);
+    }
+
+    // B. Cari Token di Database Manual
+    $accessToken = PersonalAccessToken::findToken($token);
+
+    if (!$accessToken || !$accessToken->tokenable) {
+        return response()->json(['message' => 'Token Invalid / Sesi Kadaluarsa'], 401);
+    }
+
+    // C. Paksa Login User Terkait
+    auth()->login($accessToken->tokenable);
+
+    // D. Cek Apakah Dia Admin?
+    if (auth()->user()->role !== 'admin') {
+        return response()->json(['message' => 'Akses Ditolak. Anda bukan Admin.'], 403);
+    }
+
+    // E. Lanjut ke Controller
+    return $next($request);
+
+})->prefix('admin')->group(function () {
+    
+    // Cek Auth (Ping)
     Route::get('/check', function() {
-        return response()->json(['message' => 'Admin Token Valid', 'user' => auth()->user()]);
+        return response()->json(['status' => 'OK', 'user' => auth()->user()]);
     });
 
     Route::post('/logout', [AdminAuthController::class, 'logout']);
 
     // --- PRODUK ---
-    // Menggunakan apiResource (index, store, show, update, destroy)
     Route::apiResource('products', AdminProductController::class);
 
     // --- ORDERS ---
@@ -122,10 +139,9 @@ Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function
     Route::get('/users/{id}/stats', [AdminUserController::class, 'getUserStats']);
     Route::post('/users/{id}/points', [AdminUserController::class, 'updatePoints']);
 
-    // --- MAPS (SOLUSI UPLOAD ERROR) ---
-    // Endpoint: /api/admin/maps
+    // --- MAPS (SOLUSI FIX UPLOAD) ---
     Route::get('/maps', [AdminMapController::class, 'index']);
-    Route::post('/maps', [AdminMapController::class, 'store']); // 👈 Upload masuk sini
+    Route::post('/maps', [AdminMapController::class, 'store']); 
     Route::post('/maps/{id}/activate', [AdminMapController::class, 'activate']);
     Route::delete('/maps/{id}', [AdminMapController::class, 'destroy']);
 
