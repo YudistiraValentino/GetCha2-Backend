@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Models\User; 
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB; 
-use Illuminate\Support\Facades\Hash; // 👈 Penting buat fix password
+use Illuminate\Support\Facades\Hash; 
 use Illuminate\Database\Schema\Blueprint;
 
 // Import Controller Admin
@@ -169,11 +169,9 @@ Route::get('/fix-storage', function () {
 });
 
 /**
- * 6. 🔥 FIX ADMIN PASSWORD (SOLUSI ERROR 500 / BCRYPT)
- * Jalankan ini SEKALI saja biar bisa login admin.
+ * 6. 🔥 FIX ADMIN PASSWORD
  */
 Route::get('/fix-admin-railway', function () {
-    // GANTI email ini dengan email admin kamu
     $emailTarget = 'yudis@getcha.com'; 
     
     $user = User::where('email', $emailTarget)->first();
@@ -182,9 +180,40 @@ Route::get('/fix-admin-railway', function () {
         return '❌ Error: Email ' . $emailTarget . ' tidak ditemukan di Database!';
     }
 
-    // Reset Password jadi: password123
     $user->password = Hash::make('password123');
     $user->save();
 
     return '✅ BERHASIL! Password untuk ' . $emailTarget . ' sudah diubah jadi: <b>password123</b>. Silakan Login sekarang.';
+});
+
+/**
+ * 7. 🔥 FIX CATEGORIES (SOLUSI PRODUCT UNCATEGORIZED)
+ * Jalankan ini untuk mengisi tabel categories yang kosong
+ */
+Route::get('/fix-categories-db', function () {
+    // 1. Cek tabel
+    if (!Schema::hasTable('categories')) {
+        return "❌ Tabel 'categories' belum ada. Jalankan migrasi dulu.";
+    }
+
+    // 2. Cek apakah kosong
+    $count = DB::table('categories')->count();
+    
+    // 3. Kalau kosong, isi default
+    if ($count == 0) {
+        $now = now();
+        DB::table('categories')->insert([
+            ['name' => 'Coffee', 'created_at' => $now, 'updated_at' => $now],
+            ['name' => 'Non-Coffee', 'created_at' => $now, 'updated_at' => $now],
+            ['name' => 'Food', 'created_at' => $now, 'updated_at' => $now],
+            ['name' => 'Snack', 'created_at' => $now, 'updated_at' => $now],
+        ]);
+        return "✅ SUKSES! 4 Kategori Default (Coffee, Non-Coffee, dll) berhasil ditambahkan.";
+    }
+
+    // Tampilkan data biar tau ID-nya
+    return response()->json([
+        'message' => 'Data Kategori Yang Sudah Ada (Gunakan ID ini)',
+        'data' => DB::table('categories')->get()
+    ]);
 });
