@@ -21,23 +21,26 @@ use App\Http\Controllers\Admin\FloorPlanController;
 |--------------------------------------------------------------------------
 */
 
-// Redirect root ke login
+// Redirect root ke login (atau return JSON status)
 Route::get('/', function () {
-    return redirect()->route('login');
+    return response()->json(['status' => 'Backend API is Running', 'time' => now()]);
 });
 
-// 🔓 GUEST ROUTES (Web Login - Tanpa Middleware Auth)
-// Route ini ada di root: /login
+// 🔓 GUEST ROUTES (Login)
+// Penting: Route GET /login harus dinamai 'login' agar Laravel tidak error saat unauthorized
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-// 🔒 PROTECTED ROUTES (Web Admin Dashboard)
-Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(function () {
+// 🔒 PROTECTED ROUTES (Admin Dashboard)
+// 🔥 PERUBAHAN PENTING DISINI: 
+// Ganti 'auth' menjadi 'auth:sanctum' agar Token dari Frontend diterima!
+Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->name('admin.')->group(function () {
     
-    Route::get('/', function () {
-        return redirect()->route('admin.orders.index');
-    })->name('dashboard');
+    // Test Route buat ngecek token tembus gak
+    Route::get('/check-auth', function() {
+        return response()->json(['message' => 'Token Valid! Anda terhubung sebagai Admin.', 'user' => auth()->user()]);
+    });
 
     Route::resource('products', ProductController::class);
     
@@ -60,6 +63,45 @@ Route::middleware(['auth', 'is_admin'])->prefix('admin')->name('admin.')->group(
 // ==========================================
 // 🛠️ EMERGENCY TOOLS (DANGER ZONE)
 // ==========================================
+
+/**
+ * 0. 🔥 FORCE CREATE ADMIN (SOLUSI GAK BISA LOGIN)
+ * Akses ini kalau kamu mentok gak bisa login.
+ * Ini akan menghapus user admin lama dan bikin baru yang fresh.
+ */
+Route::get('/force-create-admin', function () {
+    $email = 'yudis@getcha.com';
+    $pass = 'password123';
+    
+    try {
+        // Hapus user lama biar bersih dari error
+        User::where('email', $email)->delete();
+
+        // Buat baru
+        $user = User::create([
+            'name' => 'Super Admin',
+            'username' => 'superadmin',
+            'email' => $email,
+            'password' => Hash::make($pass),
+            'role' => 'admin',
+            'points' => 0
+        ]);
+        
+        // Buat token manual buat ngetes
+        $token = $user->createToken('emergency-token')->plainTextToken;
+
+        return response()->json([
+            'message' => '✅ Admin User Berhasil Direset Ulang!',
+            'credentials' => [
+                'email' => $email,
+                'password' => $pass
+            ],
+            'test_token' => $token
+        ]);
+    } catch (\Exception $e) {
+        return "❌ Error: " . $e->getMessage();
+    }
+});
 
 /**
  * 1. FIX USER TABLE
@@ -92,7 +134,6 @@ Route::get('/reset-orders-table', function () {
         Schema::dropIfExists('orders');
         Schema::enableForeignKeyConstraints();
 
-        // 1. Tabel Orders
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('set null');
@@ -107,7 +148,6 @@ Route::get('/reset-orders-table', function () {
             $table->timestamps();
         });
 
-        // 2. Tabel Order Items
         Schema::create('order_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_id')->constrained('orders')->onDelete('cascade');
@@ -121,7 +161,7 @@ Route::get('/reset-orders-table', function () {
             $table->timestamps();
         });
 
-        return "✅ MEGA RESET V2 SUKSES! Tabel Order & Items sudah bersih dan strukturnya benar.";
+        return "✅ MEGA RESET V2 SUKSES! Tabel Order & Items sudah bersih.";
     } catch (\Exception $e) {
         return "❌ Gagal: " . $e->getMessage();
     }
@@ -175,17 +215,13 @@ Route::get('/fix-storage', function () {
  */
 Route::get('/fix-admin-railway', function () {
     $emailTarget = 'yudis@getcha.com'; 
-    
     $user = User::where('email', $emailTarget)->first();
-    
     if (!$user) {
-        return '❌ Error: Email ' . $emailTarget . ' tidak ditemukan di Database!';
+        return '❌ Error: Email ' . $emailTarget . ' tidak ditemukan! Coba pakai /force-create-admin saja.';
     }
-
     $user->password = Hash::make('password123');
     $user->save();
-
-    return '✅ BERHASIL! Password untuk ' . $emailTarget . ' sudah diubah jadi: <b>password123</b>. Silakan Login sekarang.';
+    return '✅ BERHASIL! Password diubah jadi: <b>password123</b>.';
 });
 
 /**
@@ -206,11 +242,11 @@ Route::get('/fix-categories-db', function () {
             ['name' => 'Food', 'slug' => 'food', 'created_at' => $now, 'updated_at' => $now],
             ['name' => 'Snack', 'slug' => 'snack', 'created_at' => $now, 'updated_at' => $now],
         ]);
-        return "✅ SUKSES! 4 Kategori Default (Coffee, Non-Coffee, dll) berhasil ditambahkan beserta Slug.";
+        return "✅ SUKSES! 4 Kategori Default berhasil ditambahkan.";
     }
 
     return response()->json([
-        'message' => 'Data Kategori Yang Sudah Ada (Gunakan ID ini)',
+        'message' => 'Data Kategori Yang Sudah Ada',
         'data' => DB::table('categories')->get()
     ]);
 });
