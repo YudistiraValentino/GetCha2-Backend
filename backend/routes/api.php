@@ -22,7 +22,7 @@ use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes (CLEAN VERSION)
+| API Routes (EMERGENCY OPEN MAP VERSION)
 |--------------------------------------------------------------------------
 */
 
@@ -61,7 +61,21 @@ Route::get('/active-map', function () {
 });
 
 // ==========================================
-// 🔒 2. USER ROUTES
+// 🔓 2. MAPS ROUTES (DIBUKA TOTAL / NO-AUTH)
+// ==========================================
+// SAYA TARUH DISINI BIAR GAK KENA CEK TOKEN
+// Akses: /api/admin/maps...
+
+Route::prefix('admin')->group(function () {
+    Route::get('/maps', [AdminMapController::class, 'index']);
+    Route::post('/maps', [AdminMapController::class, 'store']); // 👈 INI UPLOADNYA
+    Route::post('/maps/{id}/activate', [AdminMapController::class, 'activate']);
+    Route::delete('/maps/{id}', [AdminMapController::class, 'destroy']);
+});
+
+
+// ==========================================
+// 🔒 3. USER ROUTES (Wajib Login)
 // ==========================================
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
@@ -74,12 +88,11 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // ==========================================
-// 👑 3. ADMIN ROUTES
+// 👑 4. SISA ADMIN ROUTES (TETAP DIKUNCI)
 // ==========================================
-// Kita pakai auth:sanctum standar, tapi nanti kita FIX handling-nya di bootstrap/app.php
+// Hanya Maps yang dikeluarkan, sisanya tetap aman
 Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
     
-    // Debug Token
     Route::get('/check', function() {
         return response()->json(['status' => 'OK', 'user' => auth()->user()]);
     });
@@ -97,10 +110,4 @@ Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function
     Route::get('/users', [AdminUserController::class, 'index']);
     Route::get('/users/{id}/stats', [AdminUserController::class, 'getUserStats']);
     Route::post('/users/{id}/points', [AdminUserController::class, 'updatePoints']);
-
-    // MAPS
-    Route::get('/maps', [AdminMapController::class, 'index']);
-    Route::post('/maps', [AdminMapController::class, 'store']);
-    Route::post('/maps/{id}/activate', [AdminMapController::class, 'activate']);
-    Route::delete('/maps/{id}', [AdminMapController::class, 'destroy']);
 });
