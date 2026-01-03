@@ -7,57 +7,19 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash; 
 use Illuminate\Database\Schema\Blueprint;
 
-// Import Controller Admin
-use App\Http\Controllers\Admin\ProductController;
-use App\Http\Controllers\Admin\OrderController;
-use App\Http\Controllers\Admin\PromoController;
-use App\Http\Controllers\Admin\UserController;
-use App\Http\Controllers\Admin\AuthController;
-use App\Http\Controllers\Admin\FloorPlanController;
-
 /*
 |--------------------------------------------------------------------------
-| Web Routes (Admin Panel & Emergency Tools)
+| Web Routes (Emergency Tools Only)
 |--------------------------------------------------------------------------
+| File ini HANYA untuk tools perbaikan database via browser.
+| Jangan taruh logika Admin Dashboard di sini (karena butuh CSRF).
 */
 
-// Redirect root ke login (atau return JSON status)
 Route::get('/', function () {
-    return response()->json(['status' => 'Backend API is Running', 'time' => now()]);
-});
-
-// 🔓 GUEST ROUTES (Login)
-// Penting: Route GET /login harus dinamai 'login' agar Laravel tidak error saat unauthorized
-Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
-Route::post('/login', [AuthController::class, 'login'])->name('login.post');
-Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-
-// 🔒 PROTECTED ROUTES (Admin Dashboard)
-// 🔥 PERUBAHAN PENTING DISINI: 
-// Ganti 'auth' menjadi 'auth:sanctum' agar Token dari Frontend diterima!
-Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->name('admin.')->group(function () {
-    
-    // Test Route buat ngecek token tembus gak
-    Route::get('/check-auth', function() {
-        return response()->json(['message' => 'Token Valid! Anda terhubung sebagai Admin.', 'user' => auth()->user()]);
-    });
-
-    Route::resource('products', ProductController::class);
-    
-    Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
-    Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
-    Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus'])->name('orders.updateStatus');
-    Route::get('/orders/{id}/print', [OrderController::class, 'printStruk'])->name('orders.print');
-
-    Route::resource('promos', PromoController::class);
-
-    Route::get('/users', [UserController::class, 'index'])->name('users.index');
-    Route::post('/users/{id}/points', [UserController::class, 'updatePoints'])->name('users.updatePoints');
-    Route::get('/users/{id}/stats', [UserController::class, 'getUserStats'])->name('users.stats');
-
-    Route::resource('maps', FloorPlanController::class)->only(['index', 'store', 'destroy']);
-    Route::post('/maps/{id}/activate', [FloorPlanController::class, 'activate'])->name('maps.activate');
-
+    return response()->json([
+        'status' => 'Backend API is Running', 
+        'info' => 'Use /api endpoints for application data.'
+    ]);
 });
 
 // ==========================================
@@ -65,19 +27,15 @@ Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->name('admin.')
 // ==========================================
 
 /**
- * 0. 🔥 FORCE CREATE ADMIN (SOLUSI GAK BISA LOGIN)
- * Akses ini kalau kamu mentok gak bisa login.
- * Ini akan menghapus user admin lama dan bikin baru yang fresh.
+ * 0. 🔥 FORCE CREATE ADMIN
  */
 Route::get('/force-create-admin', function () {
     $email = 'yudis@getcha.com';
     $pass = 'password123';
     
     try {
-        // Hapus user lama biar bersih dari error
         User::where('email', $email)->delete();
 
-        // Buat baru
         $user = User::create([
             'name' => 'Super Admin',
             'username' => 'superadmin',
@@ -87,15 +45,11 @@ Route::get('/force-create-admin', function () {
             'points' => 0
         ]);
         
-        // Buat token manual buat ngetes
         $token = $user->createToken('emergency-token')->plainTextToken;
 
         return response()->json([
-            'message' => '✅ Admin User Berhasil Direset Ulang!',
-            'credentials' => [
-                'email' => $email,
-                'password' => $pass
-            ],
+            'message' => '✅ Admin User Direset!',
+            'credentials' => ['email' => $email, 'password' => $pass],
             'test_token' => $token
         ]);
     } catch (\Exception $e) {
@@ -111,21 +65,21 @@ Route::get('/fix-users-table', function () {
     if (!Schema::hasColumn('users', 'username')) {
         DB::statement("ALTER TABLE users ADD COLUMN username VARCHAR(255) NULL AFTER name");
         DB::statement("UPDATE users SET username = CONCAT(SUBSTRING_INDEX(email, '@', 1), FLOOR(RAND() * 1000)) WHERE username IS NULL");
-        $status[] = "✅ Kolom 'username' BERHASIL ditambahkan.";
+        $status[] = "✅ Kolom 'username' ditambahkan.";
     }
     if (!Schema::hasColumn('users', 'points')) {
         DB::statement("ALTER TABLE users ADD COLUMN points INT DEFAULT 0 AFTER role");
-        $status[] = "✅ Kolom 'points' BERHASIL ditambahkan.";
+        $status[] = "✅ Kolom 'points' ditambahkan.";
     }
     if (!Schema::hasColumn('users', 'role')) {
         DB::statement("ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'user' AFTER email");
-        $status[] = "✅ Kolom 'role' BERHASIL ditambahkan.";
+        $status[] = "✅ Kolom 'role' ditambahkan.";
     }
     return count($status) > 0 ? implode('<br>', $status) : "ℹ️ Tabel User sudah up-to-date.";
 });
 
 /**
- * 2. MEGA RESET ORDERS (SOLUSI CHECKOUT ERROR)
+ * 2. MEGA RESET ORDERS
  */
 Route::get('/reset-orders-table', function () {
     try {
@@ -161,19 +115,19 @@ Route::get('/reset-orders-table', function () {
             $table->timestamps();
         });
 
-        return "✅ MEGA RESET V2 SUKSES! Tabel Order & Items sudah bersih.";
+        return "✅ MEGA RESET V2 SUKSES!";
     } catch (\Exception $e) {
         return "❌ Gagal: " . $e->getMessage();
     }
 });
 
 /**
- * 3. FIX PROMOS (SLUG)
+ * 3. FIX PROMOS
  */
 Route::get('/fix-promos', function () {
     if (!Schema::hasColumn('promos', 'slug')) {
         DB::statement("ALTER TABLE promos ADD COLUMN slug VARCHAR(255) NULL AFTER title");
-        return "✅ Kolom 'slug' berhasil ditambahkan ke promos.";
+        return "✅ Kolom 'slug' ditambahkan.";
     }
     return "ℹ️ Kolom slug sudah ada.";
 });
@@ -196,7 +150,7 @@ Route::get('/fix-maps', function () {
 });
 
 /**
- * 5. FIX STORAGE (Gambar 404)
+ * 5. FIX STORAGE
  */
 Route::get('/fix-storage', function () {
     try {
@@ -204,37 +158,18 @@ Route::get('/fix-storage', function () {
             app('files')->delete(public_path('storage'));
         }
         app('files')->link(storage_path('app/public'), public_path('storage'));
-        return "✅ Storage Link berhasil dibuat/diperbaiki!";
+        return "✅ Storage Link Fixed!";
     } catch (\Exception $e) {
         return "❌ Error: " . $e->getMessage();
     }
 });
 
 /**
- * 6. 🔥 FIX ADMIN PASSWORD
- */
-Route::get('/fix-admin-railway', function () {
-    $emailTarget = 'yudis@getcha.com'; 
-    $user = User::where('email', $emailTarget)->first();
-    if (!$user) {
-        return '❌ Error: Email ' . $emailTarget . ' tidak ditemukan! Coba pakai /force-create-admin saja.';
-    }
-    $user->password = Hash::make('password123');
-    $user->save();
-    return '✅ BERHASIL! Password diubah jadi: <b>password123</b>.';
-});
-
-/**
- * 7. 🔥 FIX CATEGORIES (SOLUSI PRODUCT UNCATEGORIZED)
+ * 6. FIX CATEGORIES
  */
 Route::get('/fix-categories-db', function () {
-    if (!Schema::hasTable('categories')) {
-        return "❌ Tabel 'categories' belum ada. Jalankan migrasi dulu.";
-    }
-
-    $count = DB::table('categories')->count();
-    
-    if ($count == 0) {
+    if (!Schema::hasTable('categories')) return "❌ Tabel categories belum ada.";
+    if (DB::table('categories')->count() == 0) {
         $now = now();
         DB::table('categories')->insert([
             ['name' => 'Coffee', 'slug' => 'coffee', 'created_at' => $now, 'updated_at' => $now],
@@ -242,11 +177,7 @@ Route::get('/fix-categories-db', function () {
             ['name' => 'Food', 'slug' => 'food', 'created_at' => $now, 'updated_at' => $now],
             ['name' => 'Snack', 'slug' => 'snack', 'created_at' => $now, 'updated_at' => $now],
         ]);
-        return "✅ SUKSES! 4 Kategori Default berhasil ditambahkan.";
+        return "✅ 4 Kategori Default ditambahkan.";
     }
-
-    return response()->json([
-        'message' => 'Data Kategori Yang Sudah Ada',
-        'data' => DB::table('categories')->get()
-    ]);
+    return response()->json(DB::table('categories')->get());
 });
