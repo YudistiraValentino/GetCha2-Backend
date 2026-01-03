@@ -199,16 +199,36 @@ Route::get('/fix-categories-db', function () {
     // 2. Cek apakah kosong
     $count = DB::table('categories')->count();
     
-    // 3. Kalau kosong, isi default
+    // 3. Kalau kosong, isi default (SEKARANG SUDAH PAKAI SLUG)
     if ($count == 0) {
         $now = now();
         DB::table('categories')->insert([
-            ['name' => 'Coffee', 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Non-Coffee', 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Food', 'created_at' => $now, 'updated_at' => $now],
-            ['name' => 'Snack', 'created_at' => $now, 'updated_at' => $now],
+            [
+                'name' => 'Coffee', 
+                'slug' => 'coffee', 
+                'created_at' => $now, 
+                'updated_at' => $now
+            ],
+            [
+                'name' => 'Non-Coffee', 
+                'slug' => 'non-coffee', 
+                'created_at' => $now, 
+                'updated_at' => $now
+            ],
+            [
+                'name' => 'Food', 
+                'slug' => 'food', 
+                'created_at' => $now, 
+                'updated_at' => $now
+            ],
+            [
+                'name' => 'Snack', 
+                'slug' => 'snack', 
+                'created_at' => $now, 
+                'updated_at' => $now
+            ],
         ]);
-        return "✅ SUKSES! 4 Kategori Default (Coffee, Non-Coffee, dll) berhasil ditambahkan.";
+        return "✅ SUKSES! 4 Kategori Default (Coffee, Non-Coffee, dll) berhasil ditambahkan beserta Slug.";
     }
 
     // Tampilkan data biar tau ID-nya
