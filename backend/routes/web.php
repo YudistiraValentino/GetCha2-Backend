@@ -174,7 +174,7 @@ Route::get('/fix-storage', function () {
  */
 Route::get('/fix-admin-railway', function () {
     // GANTI email ini dengan email admin kamu
-    $emailTarget = 'admin@example.com'; 
+    $emailTarget = 'yudis@getcha.com'; 
     
     $user = User::where('email', $emailTarget)->first();
     
