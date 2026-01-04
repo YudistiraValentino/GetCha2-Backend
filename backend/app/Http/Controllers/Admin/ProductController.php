@@ -40,9 +40,38 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
-        // 1. LOG DATA (Biar ketahuan di Logs Railway apa yang dikirim Frontend)
+        // 1. LOG DATA (Cek Logs Railway untuk lihat data yang dikirim Frontend)
         Log::info('CREATE PRODUCT REQUEST:', $request->all());
 
+        // 🔥 [DETEKTIF MODE] CEK VARIABLE RAILWAY SEBELUM LANJUT
+        // Kode ini akan menangkap error konfigurasi yang bikin "Array Offset Null"
+        $cloudinaryUrl = env('CLOUDINARY_URL');
+        
+        if (empty($cloudinaryUrl)) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'FATAL ERROR: Variable CLOUDINARY_URL belum ada di Railway! Harap tambahkan di menu Variables.'
+            ], 500);
+        }
+
+        // Cek apakah user tidak sengaja copy-paste nama variabelnya juga
+        if (strpos($cloudinaryUrl, 'CLOUDINARY_URL=') !== false) {
+             return response()->json([
+                'success' => false, 
+                'message' => 'FATAL ERROR: Format Value CLOUDINARY_URL salah! Jangan tulis "CLOUDINARY_URL=" di dalam kolom Value. Cukup URL-nya saja (cloudinary://...).'
+            ], 500);
+        }
+
+        // Cek apakah ada tanda kutip
+        if (strpos($cloudinaryUrl, '"') !== false || strpos($cloudinaryUrl, "'") !== false) {
+             return response()->json([
+                'success' => false, 
+                'message' => 'FATAL ERROR: Format CLOUDINARY_URL tidak boleh ada tanda kutip (" atau \'). Hapus tanda kutipnya di Railway Variables.'
+            ], 500);
+        }
+        // 🔥 [END DETEKTIF MODE]
+
+        // Validasi Input
         $request->validate([
             'name' => 'required|string',
             'category_id' => 'required',
@@ -56,11 +85,15 @@ class ProductController extends Controller
             // 2. Handle Upload Image (Cloudinary)
             $imagePath = null;
             if ($request->hasFile('image')) {
-                // Upload ke folder 'getcha_products'
-                $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
-                    'folder' => 'getcha_products'
-                ]);
-                $imagePath = $uploadedFile->getSecurePath();
+                try {
+                    $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
+                        'folder' => 'getcha_products'
+                    ]);
+                    $imagePath = $uploadedFile->getSecurePath();
+                } catch (\Exception $e) {
+                    // Tangkap error spesifik Cloudinary biar ketahuan
+                    throw new \Exception("Gagal Upload ke Cloudinary: " . $e->getMessage() . ". (Cek koneksi internet server atau validitas URL Cloudinary)");
+                }
             }
 
             // 3. Simpan Data Utama
@@ -74,11 +107,10 @@ class ProductController extends Controller
                 'is_promo' => filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             ]);
 
-            // 4. Simpan Variants (MENGGUNAKAN DATA_GET AGAR TIDAK ERROR NULL)
+            // 4. Simpan Variants (MENGGUNAKAN DATA_GET AGAR AMAN)
             $variants = $this->parseJsonField($request->variants);
             if (!empty($variants) && is_array($variants)) {
                 foreach ($variants as $variant) {
-                    // Ambil data dengan aman. Jika null, return null (tidak crash)
                     $vName = data_get($variant, 'name'); 
                     $vPrice = data_get($variant, 'price');
 
@@ -92,7 +124,7 @@ class ProductController extends Controller
                 }
             }
 
-            // 5. Simpan Modifiers (MENGGUNAKAN DATA_GET AGAR TIDAK ERROR NULL)
+            // 5. Simpan Modifiers (MENGGUNAKAN DATA_GET AGAR AMAN)
             $modifiers = $this->parseJsonField($request->modifiers);
             if (!empty($modifiers) && is_array($modifiers)) {
                 foreach ($modifiers as $mod) {
@@ -100,7 +132,7 @@ class ProductController extends Controller
                     
                     if (!empty($mName)) {
                         $cleanOptions = [];
-                        $rawOptions = data_get($mod, 'options'); // Ambil array options
+                        $rawOptions = data_get($mod, 'options');
 
                         if (is_array($rawOptions)) {
                             foreach ($rawOptions as $opt) {
@@ -136,7 +168,6 @@ class ProductController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
-            // Log Error lengkap dengan nomor baris
             Log::error("GAGAL STORE PRODUCT: " . $e->getMessage() . ' - Line: ' . $e->getLine());
             
             return response()->json([
@@ -166,13 +197,16 @@ class ProductController extends Controller
         try {
             DB::beginTransaction();
 
-            // Handle Image Update
             $imagePath = $product->image;
             if ($request->hasFile('image')) {
-                $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
-                    'folder' => 'getcha_products'
-                ]);
-                $imagePath = $uploadedFile->getSecurePath();
+                try {
+                    $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
+                        'folder' => 'getcha_products'
+                    ]);
+                    $imagePath = $uploadedFile->getSecurePath();
+                } catch (\Exception $e) {
+                     throw new \Exception("Gagal Upload ke Cloudinary (Update): " . $e->getMessage());
+                }
             }
 
             $product->update([
@@ -184,7 +218,7 @@ class ProductController extends Controller
                 'is_promo' => filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             ]);
 
-            // Update Variants (Delete Old -> Create New)
+            // Update Variants
             $product->variants()->delete();
             $variants = $this->parseJsonField($request->variants);
             if (!empty($variants) && is_array($variants)) {
@@ -200,7 +234,7 @@ class ProductController extends Controller
                 }
             }
 
-            // Update Modifiers (Delete Old -> Create New)
+            // Update Modifiers
             $product->modifiers()->delete();
             $modifiers = $this->parseJsonField($request->modifiers);
             if (!empty($modifiers) && is_array($modifiers)) {
@@ -259,9 +293,7 @@ class ProductController extends Controller
         }
     }
 
-    /**
-     * HELPER: Parse JSON String from Frontend
-     */
+    // Helper: Parse JSON form-data
     private function parseJsonField($field)
     {
         if (is_string($field)) {
