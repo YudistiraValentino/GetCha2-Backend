@@ -16,34 +16,24 @@ use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class ProductController extends Controller
 {
-    /**
-     * GET /api/admin/products
-     */
     public function index()
     {
-        $products = Product::with(['category', 'variants', 'modifiers'])
-                           ->latest()
-                           ->get();
-
+        $products = Product::with(['category', 'variants', 'modifiers'])->latest()->get();
         return response()->json(['success' => true, 'data' => $products]);
     }
 
-    /**
-     * GET /api/admin/products/{id}
-     */
     public function show($id)
     {
         $product = Product::with(['category', 'variants', 'modifiers'])->find($id);
         if (!$product) return response()->json(['success' => false, 'message' => 'Product not found'], 404);
-
         return response()->json(['success' => true, 'data' => $product]);
     }
 
-    /**
-     * POST /api/admin/products
-     */
     public function store(Request $request)
     {
+        // 1. LOG DATA (Biar ketahuan kalau frontend kirim data aneh)
+        Log::info('CREATE PRODUCT REQUEST:', $request->all());
+
         $request->validate([
             'name' => 'required|string',
             'category_id' => 'required',
@@ -54,7 +44,7 @@ class ProductController extends Controller
         try {
             DB::beginTransaction();
 
-            // 1. Handle Upload Image (Cloudinary)
+            // 2. Handle Upload Image
             $imagePath = null;
             if ($request->hasFile('image')) {
                 $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
@@ -63,7 +53,7 @@ class ProductController extends Controller
                 $imagePath = $uploadedFile->getSecurePath();
             }
 
-            // 2. Simpan Data Utama
+            // 3. Simpan Data Utama
             $product = Product::create([
                 'name' => $request->name,
                 'slug' => Str::slug($request->name),
@@ -74,42 +64,43 @@ class ProductController extends Controller
                 'is_promo' => filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             ]);
 
-            // 3. Simpan Variants (DENGAN PENJAGAAN KETAT 🛡️)
+            // 4. Simpan Variants (PAKAI DATA_GET - LEBIH SAKTI 🛡️)
             $variants = $this->parseJsonField($request->variants);
             if (!empty($variants) && is_array($variants)) {
                 foreach ($variants as $variant) {
-                    // 🛡️ CEK: Kalau variant-nya null/bukan array, SKIP!
-                    if (!is_array($variant)) continue; 
+                    // Pakai data_get() biar gak crash kalau $variant null
+                    $vName = data_get($variant, 'name'); 
+                    $vPrice = data_get($variant, 'price');
 
-                    if (!empty($variant['name'])) {
+                    if (!empty($vName)) {
                         ProductVariant::create([
                             'product_id' => $product->id,
-                            'name' => $variant['name'],
-                            'price' => $variant['price'] ?? $product->price,
+                            'name' => $vName,
+                            'price' => $vPrice ?? $product->price,
                         ]);
                     }
                 }
             }
 
-            // 4. Simpan Modifiers (DENGAN PENJAGAAN KETAT 🛡️)
+            // 5. Simpan Modifiers (PAKAI DATA_GET - LEBIH SAKTI 🛡️)
             $modifiers = $this->parseJsonField($request->modifiers);
             if (!empty($modifiers) && is_array($modifiers)) {
                 foreach ($modifiers as $mod) {
-                    // 🛡️ CEK: Kalau modifier-nya null/bukan array, SKIP!
-                    if (!is_array($mod)) continue;
-
-                    if (!empty($mod['name'])) {
+                    $mName = data_get($mod, 'name');
+                    
+                    if (!empty($mName)) {
                         $cleanOptions = [];
-                        if (isset($mod['options']) && is_array($mod['options'])) {
-                            foreach ($mod['options'] as $opt) {
-                                // 🛡️ CEK: Kalau option-nya null, SKIP!
-                                if (!is_array($opt)) continue;
+                        $rawOptions = data_get($mod, 'options'); // Ambil options dengan aman
 
-                                if (!empty($opt['label'])) {
+                        if (is_array($rawOptions)) {
+                            foreach ($rawOptions as $opt) {
+                                $oLabel = data_get($opt, 'label');
+                                
+                                if (!empty($oLabel)) {
                                     $cleanOptions[] = [
-                                        'label' => $opt['label'],
-                                        'priceChange' => $opt['price'] ?? 0,
-                                        'isDefault' => isset($opt['default']) ? filter_var($opt['default'], FILTER_VALIDATE_BOOLEAN) : false
+                                        'label' => $oLabel,
+                                        'priceChange' => data_get($opt, 'price') ?? 0,
+                                        'isDefault' => filter_var(data_get($opt, 'default'), FILTER_VALIDATE_BOOLEAN)
                                     ];
                                 }
                             }
@@ -117,8 +108,8 @@ class ProductController extends Controller
 
                         ProductModifier::create([
                             'product_id' => $product->id,
-                            'name' => $mod['name'],
-                            'is_required' => isset($mod['required']) ? filter_var($mod['required'], FILTER_VALIDATE_BOOLEAN) : false,
+                            'name' => $mName,
+                            'is_required' => filter_var(data_get($mod, 'required'), FILTER_VALIDATE_BOOLEAN),
                             'options' => $cleanOptions
                         ]);
                     }
@@ -135,7 +126,8 @@ class ProductController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
-            Log::error("Error create product: " . $e->getMessage());
+            // Log Error lengkap biar kita tau baris ke berapa
+            Log::error("GAGAL STORE PRODUCT: " . $e->getMessage() . ' - Line: ' . $e->getLine());
             return response()->json([
                 'success' => false, 
                 'message' => 'Gagal membuat produk: ' . $e->getMessage()
@@ -143,11 +135,10 @@ class ProductController extends Controller
         }
     }
 
-    /**
-     * PUT /api/admin/products/{id}
-     */
     public function update(Request $request, $id)
     {
+        Log::info('UPDATE PRODUCT REQUEST:', $request->all()); // Log buat debugging
+
         $product = Product::find($id);
         if (!$product) return response()->json(['success' => false, 'message' => 'Product not found'], 404);
 
@@ -183,13 +174,12 @@ class ProductController extends Controller
             $variants = $this->parseJsonField($request->variants);
             if (!empty($variants) && is_array($variants)) {
                 foreach ($variants as $variant) {
-                    if (!is_array($variant)) continue; // 🛡️ Safety Check
-
-                    if (!empty($variant['name'])) {
+                    $vName = data_get($variant, 'name');
+                    if (!empty($vName)) {
                         ProductVariant::create([
                             'product_id' => $product->id,
-                            'name' => $variant['name'],
-                            'price' => $variant['price'] ?? $product->price,
+                            'name' => $vName,
+                            'price' => data_get($variant, 'price') ?? $product->price,
                         ]);
                     }
                 }
@@ -200,19 +190,19 @@ class ProductController extends Controller
             $modifiers = $this->parseJsonField($request->modifiers);
             if (!empty($modifiers) && is_array($modifiers)) {
                 foreach ($modifiers as $mod) {
-                    if (!is_array($mod)) continue; // 🛡️ Safety Check
-
-                    if (!empty($mod['name'])) {
+                    $mName = data_get($mod, 'name');
+                    if (!empty($mName)) {
                         $cleanOptions = [];
-                        if (isset($mod['options']) && is_array($mod['options'])) {
-                            foreach ($mod['options'] as $opt) {
-                                if (!is_array($opt)) continue; // 🛡️ Safety Check
+                        $rawOptions = data_get($mod, 'options');
 
-                                if (!empty($opt['label'])) {
+                        if (is_array($rawOptions)) {
+                            foreach ($rawOptions as $opt) {
+                                $oLabel = data_get($opt, 'label');
+                                if (!empty($oLabel)) {
                                     $cleanOptions[] = [
-                                        'label' => $opt['label'],
-                                        'priceChange' => $opt['price'] ?? 0,
-                                        'isDefault' => isset($opt['default']) ? filter_var($opt['default'], FILTER_VALIDATE_BOOLEAN) : false
+                                        'label' => $oLabel,
+                                        'priceChange' => data_get($opt, 'price') ?? 0,
+                                        'isDefault' => filter_var(data_get($opt, 'default'), FILTER_VALIDATE_BOOLEAN)
                                     ];
                                 }
                             }
@@ -220,8 +210,8 @@ class ProductController extends Controller
 
                         ProductModifier::create([
                             'product_id' => $product->id,
-                            'name' => $mod['name'],
-                            'is_required' => isset($mod['required']) ? filter_var($mod['required'], FILTER_VALIDATE_BOOLEAN) : false,
+                            'name' => $mName,
+                            'is_required' => filter_var(data_get($mod, 'required'), FILTER_VALIDATE_BOOLEAN),
                             'options' => $cleanOptions
                         ]);
                     }
@@ -229,18 +219,15 @@ class ProductController extends Controller
             }
 
             DB::commit();
-
             return response()->json(['success' => true, 'message' => 'Produk berhasil diupdate!', 'data' => $product]);
 
         } catch (\Exception $e) {
             DB::rollback();
+            Log::error("GAGAL UPDATE PRODUCT: " . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Gagal update: ' . $e->getMessage()], 500);
         }
     }
 
-    /**
-     * DELETE /api/admin/products/{id}
-     */
     public function destroy($id)
     {
         $product = Product::find($id);
@@ -254,7 +241,6 @@ class ProductController extends Controller
         }
     }
 
-    // Helper: Parse JSON form-data
     private function parseJsonField($field)
     {
         if (is_string($field)) {
