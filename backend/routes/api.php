@@ -22,12 +22,22 @@ use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes (SIMPLE AUTH VERSION)
+| API Routes (FIXED LOGIN ROUTE)
 |--------------------------------------------------------------------------
 */
 
 // ==========================================
-// 🔓 1. PUBLIC ROUTES (Bebas)
+// 🛡️ JARING PENGAMAN (FIX ERROR "Route login not found")
+// ==========================================
+// Ini menangkap user yang 'ditendang' middleware tapi bingung mau kemana.
+// Kita kasih nama 'login' biar Laravel seneng.
+Route::get('/login', function () {
+    return response()->json(['success' => false, 'message' => 'Unauthenticated (Silakan Login Dulu)'], 401);
+})->name('login');
+
+
+// ==========================================
+// 🔓 1. PUBLIC ROUTES
 // ==========================================
 Route::get('/menu', [MenuController::class, 'index']);
 Route::get('/menu/{id}', [MenuController::class, 'show']);
@@ -38,8 +48,10 @@ Route::post('/promos/apply', [PromoController::class, 'apply']);
 
 // AUTH Public
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/admin/login', [AdminAuthController::class, 'login']); // Admin Login
+Route::post('/login', [AuthController::class, 'login']); // Login User Biasa
+
+// 🔥 ADMIN LOGIN (Route ini PENTING)
+Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
 // Active Map
 Route::get('/active-map', function () {
@@ -59,8 +71,9 @@ Route::get('/active-map', function () {
 });
 
 // ==========================================
-// 🔒 2. USER ROUTES (Pakai simple.auth juga biar konsisten)
+// 🔒 2. USER ROUTES
 // ==========================================
+// Pakai Middleware Simple Auth yang tadi kita buat (atau auth:sanctum juga boleh)
 Route::middleware('simple.auth')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
@@ -72,33 +85,35 @@ Route::middleware('simple.auth')->group(function () {
 });
 
 // ==========================================
-// 👑 3. ADMIN ROUTES (SECURE & STABLE)
+// 👑 3. ADMIN ROUTES (GUARD MANUAL / SIMPLE AUTH)
 // ==========================================
-// 🔥 Kita pakai 'simple.auth' pengganti 'auth:sanctum'
-// 🔥 Kita pakai 'is_admin' buat ngecek role
-
+// Kita pakai simple.auth biar gak ribet sama cookie
 Route::middleware(['simple.auth', 'is_admin'])->prefix('admin')->group(function () {
     
+    // Cek Token
     Route::get('/check', function() {
         return response()->json(['status' => 'OK', 'user' => auth()->user()]);
     });
 
     Route::post('/logout', [AdminAuthController::class, 'logout']);
 
-    // CRUD DATA
+    // --- PRODUCTS ---
     Route::apiResource('products', AdminProductController::class);
     
+    // --- ORDERS ---
     Route::get('/orders', [AdminOrderController::class, 'index']);
     Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
     Route::put('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
     
+    // --- PROMOS ---
     Route::apiResource('promos', AdminPromoController::class);
 
+    // --- USERS ---
     Route::get('/users', [AdminUserController::class, 'index']);
     Route::get('/users/{id}/stats', [AdminUserController::class, 'getUserStats']);
     Route::post('/users/{id}/points', [AdminUserController::class, 'updatePoints']);
 
-    // MAPS
+    // --- MAPS ---
     Route::get('/maps', [AdminMapController::class, 'index']);
     Route::post('/maps', [AdminMapController::class, 'store']);
     Route::post('/maps/{id}/activate', [AdminMapController::class, 'activate']);
