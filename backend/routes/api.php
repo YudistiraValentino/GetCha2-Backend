@@ -22,19 +22,9 @@ use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes (FIXED LOGIN ROUTE)
+| API Routes (CLEAN & FIXED)
 |--------------------------------------------------------------------------
 */
-
-// ==========================================
-// 🛡️ JARING PENGAMAN (FIX ERROR "Route login not found")
-// ==========================================
-// Ini menangkap user yang 'ditendang' middleware tapi bingung mau kemana.
-// Kita kasih nama 'login' biar Laravel seneng.
-Route::get('/login', function () {
-    return response()->json(['success' => false, 'message' => 'Unauthenticated (Silakan Login Dulu)'], 401);
-})->name('login');
-
 
 // ==========================================
 // 🔓 1. PUBLIC ROUTES
@@ -48,9 +38,9 @@ Route::post('/promos/apply', [PromoController::class, 'apply']);
 
 // AUTH Public
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']); // Login User Biasa
+Route::post('/login', [AuthController::class, 'login']); 
 
-// 🔥 ADMIN LOGIN (Route ini PENTING)
+// 🔥 ADMIN LOGIN
 Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
 // Active Map
@@ -73,7 +63,7 @@ Route::get('/active-map', function () {
 // ==========================================
 // 🔒 2. USER ROUTES
 // ==========================================
-// Pakai Middleware Simple Auth yang tadi kita buat (atau auth:sanctum juga boleh)
+// Middleware simple.auth untuk user biasa
 Route::middleware('simple.auth')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
@@ -85,12 +75,11 @@ Route::middleware('simple.auth')->group(function () {
 });
 
 // ==========================================
-// 👑 3. ADMIN ROUTES (GUARD MANUAL / SIMPLE AUTH)
+// 👑 3. ADMIN ROUTES
 // ==========================================
-// Kita pakai simple.auth biar gak ribet sama cookie
+// Middleware simple.auth + is_admin
 Route::middleware(['simple.auth', 'is_admin'])->prefix('admin')->group(function () {
     
-    // Cek Token
     Route::get('/check', function() {
         return response()->json(['status' => 'OK', 'user' => auth()->user()]);
     });
