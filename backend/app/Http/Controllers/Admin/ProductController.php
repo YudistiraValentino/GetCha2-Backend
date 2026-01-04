@@ -18,7 +18,6 @@ class ProductController extends Controller
 {
     /**
      * GET /api/admin/products
-     * Mengambil semua produk untuk List Table
      */
     public function index()
     {
@@ -26,37 +25,25 @@ class ProductController extends Controller
                            ->latest()
                            ->get();
 
-        return response()->json([
-            'success' => true,
-            'data' => $products
-        ]);
+        return response()->json(['success' => true, 'data' => $products]);
     }
 
     /**
      * GET /api/admin/products/{id}
-     * Mengambil 1 produk detail untuk form Edit
      */
     public function show($id)
     {
         $product = Product::with(['category', 'variants', 'modifiers'])->find($id);
+        if (!$product) return response()->json(['success' => false, 'message' => 'Product not found'], 404);
 
-        if (!$product) {
-            return response()->json(['success' => false, 'message' => 'Product not found'], 404);
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => $product
-        ]);
+        return response()->json(['success' => true, 'data' => $product]);
     }
 
     /**
      * POST /api/admin/products
-     * Menyimpan produk baru
      */
     public function store(Request $request)
     {
-        // Validasi
         $request->validate([
             'name' => 'required|string',
             'category_id' => 'required',
@@ -67,15 +54,12 @@ class ProductController extends Controller
         try {
             DB::beginTransaction();
 
-            // 1. Handle Upload Image (KE CLOUDINARY) ☁️
+            // 1. Handle Upload Image (Cloudinary)
             $imagePath = null;
             if ($request->hasFile('image')) {
-                // Upload ke Cloudinary folder 'getcha_products'
                 $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
                     'folder' => 'getcha_products'
                 ]);
-                
-                // Ambil URL HTTPS yang aman
                 $imagePath = $uploadedFile->getSecurePath();
             }
 
@@ -86,14 +70,17 @@ class ProductController extends Controller
                 'category_id' => $request->category_id,
                 'description' => $request->description,
                 'price' => $request->price,
-                'image' => $imagePath, // URL dari Cloudinary
+                'image' => $imagePath,
                 'is_promo' => filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             ]);
 
-            // 3. Simpan Variants
+            // 3. Simpan Variants (DENGAN PENJAGAAN KETAT 🛡️)
             $variants = $this->parseJsonField($request->variants);
-            if (!empty($variants)) {
+            if (!empty($variants) && is_array($variants)) {
                 foreach ($variants as $variant) {
+                    // 🛡️ CEK: Kalau variant-nya null/bukan array, SKIP!
+                    if (!is_array($variant)) continue; 
+
                     if (!empty($variant['name'])) {
                         ProductVariant::create([
                             'product_id' => $product->id,
@@ -104,14 +91,20 @@ class ProductController extends Controller
                 }
             }
 
-            // 4. Simpan Modifiers
+            // 4. Simpan Modifiers (DENGAN PENJAGAAN KETAT 🛡️)
             $modifiers = $this->parseJsonField($request->modifiers);
-            if (!empty($modifiers)) {
+            if (!empty($modifiers) && is_array($modifiers)) {
                 foreach ($modifiers as $mod) {
+                    // 🛡️ CEK: Kalau modifier-nya null/bukan array, SKIP!
+                    if (!is_array($mod)) continue;
+
                     if (!empty($mod['name'])) {
                         $cleanOptions = [];
                         if (isset($mod['options']) && is_array($mod['options'])) {
                             foreach ($mod['options'] as $opt) {
+                                // 🛡️ CEK: Kalau option-nya null, SKIP!
+                                if (!is_array($opt)) continue;
+
                                 if (!empty($opt['label'])) {
                                     $cleanOptions[] = [
                                         'label' => $opt['label'],
@@ -136,13 +129,13 @@ class ProductController extends Controller
 
             return response()->json([
                 'success' => true, 
-                'message' => 'Produk berhasil dibuat (Saved to Cloud)!', 
+                'message' => 'Produk berhasil dibuat!', 
                 'data' => $product
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollback();
-            Log::error($e->getMessage());
+            Log::error("Error create product: " . $e->getMessage());
             return response()->json([
                 'success' => false, 
                 'message' => 'Gagal membuat produk: ' . $e->getMessage()
@@ -151,16 +144,12 @@ class ProductController extends Controller
     }
 
     /**
-     * POST/PUT /api/admin/products/{id}
-     * Update produk
+     * PUT /api/admin/products/{id}
      */
     public function update(Request $request, $id)
     {
         $product = Product::find($id);
-
-        if (!$product) {
-            return response()->json(['success' => false, 'message' => 'Product not found'], 404);
-        }
+        if (!$product) return response()->json(['success' => false, 'message' => 'Product not found'], 404);
 
         $request->validate([
             'name' => 'required|string',
@@ -172,35 +161,30 @@ class ProductController extends Controller
         try {
             DB::beginTransaction();
 
-            // 1. Handle Image (KE CLOUDINARY) ☁️
-            $imagePath = $product->image; // Pakai gambar lama kalau user gak upload baru
-            
+            $imagePath = $product->image;
             if ($request->hasFile('image')) {
-                // Upload gambar baru ke Cloudinary
                 $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
                     'folder' => 'getcha_products'
                 ]);
                 $imagePath = $uploadedFile->getSecurePath();
-                
-                // (Optional: Gambar lama di Cloudinary biarkan saja dulu biar gak ribet error handling)
             }
 
-            // 2. Update Data Utama
             $product->update([
                 'name' => $request->name,
                 'category_id' => $request->category_id,
                 'description' => $request->description,
                 'price' => $request->price,
-                'image' => $imagePath, // URL Baru atau Lama
+                'image' => $imagePath,
                 'is_promo' => filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             ]);
 
-            // 3. Update Variants (Reset strategy)
+            // Update Variants
             $product->variants()->delete();
             $variants = $this->parseJsonField($request->variants);
-            
-            if (!empty($variants)) {
+            if (!empty($variants) && is_array($variants)) {
                 foreach ($variants as $variant) {
+                    if (!is_array($variant)) continue; // 🛡️ Safety Check
+
                     if (!empty($variant['name'])) {
                         ProductVariant::create([
                             'product_id' => $product->id,
@@ -211,16 +195,19 @@ class ProductController extends Controller
                 }
             }
 
-            // 4. Update Modifiers
+            // Update Modifiers
             $product->modifiers()->delete();
             $modifiers = $this->parseJsonField($request->modifiers);
-
-            if (!empty($modifiers)) {
+            if (!empty($modifiers) && is_array($modifiers)) {
                 foreach ($modifiers as $mod) {
+                    if (!is_array($mod)) continue; // 🛡️ Safety Check
+
                     if (!empty($mod['name'])) {
                         $cleanOptions = [];
                         if (isset($mod['options']) && is_array($mod['options'])) {
                             foreach ($mod['options'] as $opt) {
+                                if (!is_array($opt)) continue; // 🛡️ Safety Check
+
                                 if (!empty($opt['label'])) {
                                     $cleanOptions[] = [
                                         'label' => $opt['label'],
@@ -243,18 +230,11 @@ class ProductController extends Controller
 
             DB::commit();
 
-            return response()->json([
-                'success' => true, 
-                'message' => 'Produk berhasil diupdate!',
-                'data' => $product
-            ]);
+            return response()->json(['success' => true, 'message' => 'Produk berhasil diupdate!', 'data' => $product]);
 
         } catch (\Exception $e) {
             DB::rollback();
-            return response()->json([
-                'success' => false, 
-                'message' => 'Gagal update: ' . $e->getMessage()
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Gagal update: ' . $e->getMessage()], 500);
         }
     }
 
@@ -264,17 +244,11 @@ class ProductController extends Controller
     public function destroy($id)
     {
         $product = Product::find($id);
-
-        if (!$product) {
-            return response()->json(['success' => false, 'message' => 'Product not found'], 404);
-        }
+        if (!$product) return response()->json(['success' => false, 'message' => 'Product not found'], 404);
 
         try {
-            // Hapus data di DB saja (Gambar di Cloudinary biarkan saja biar aman/cepat)
             $product->delete();
-
             return response()->json(['success' => true, 'message' => 'Produk berhasil dihapus!']);
-
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Gagal hapus: ' . $e->getMessage()], 500);
         }
@@ -284,7 +258,8 @@ class ProductController extends Controller
     private function parseJsonField($field)
     {
         if (is_string($field)) {
-            return json_decode($field, true) ?? [];
+            $decoded = json_decode($field, true);
+            return is_array($decoded) ? $decoded : [];
         }
         return is_array($field) ? $field : [];
     }
