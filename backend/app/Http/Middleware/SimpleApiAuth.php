@@ -14,10 +14,16 @@ class SimpleApiAuth
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // 1. Ambil Token dari Header 'Authorization: Bearer ...'
+        // 1. Cek Header 'Authorization: Bearer ...' (Cara Normal)
         $token = $request->bearerToken();
 
-        // 2. Kalau gak bawa token, tolak
+        // 2. 🔥 JALUR TIKUS (Cara Darurat buat Upload File)
+        // Kalau header kosong (dibuang server), cek apakah ada 'token' yang diselipkan di form-data
+        if (!$token) {
+            $token = $request->input('token');
+        }
+
+        // 3. Kalau masih gak nemu juga, baru tolak
         if (!$token) {
             return response()->json([
                 'success' => false,
@@ -25,10 +31,9 @@ class SimpleApiAuth
             ], 401);
         }
 
-        // 3. Cek Token di Database Manual
+        // 4. Cek Token di Database
         $accessToken = PersonalAccessToken::findToken($token);
 
-        // 4. Kalau token gak ada di DB atau user-nya udah dihapus
         if (!$accessToken || !$accessToken->tokenable) {
             return response()->json([
                 'success' => false,
@@ -36,8 +41,7 @@ class SimpleApiAuth
             ], 401);
         }
 
-        // 5. LOLOS! Paksa User Login berdasarkan token tadi
-        // (Bypass semua logic session/cookie laravel yang ribet)
+        // 5. LOLOS! Login user
         auth()->login($accessToken->tokenable);
 
         return $next($request);
