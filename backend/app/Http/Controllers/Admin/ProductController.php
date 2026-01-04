@@ -33,32 +33,24 @@ class ProductController extends Controller
         $request->validate([
             'name' => 'required',
             'price' => 'required',
-            'image' => 'required|image|max:10240',
+            'image' => 'required|image|max:10240', // Max 10MB
         ]);
 
         try {
             DB::beginTransaction();
 
-            // 🔥 JURUS PAMUNGKAS: FORCE CONFIGURATION
-            // Ganti tulisan di bawah ini dengan URL Cloudinary kamu!
-            // Jangan hapus tanda kutipnya!
-            config(['cloudinary.cloud_url' => 'MASUKKAN_URL_CLOUDINARY_DISINI']);
-
-            // Contoh hasil jadinya nanti begini:
-            // config(['cloudinary.cloud_url' => 'cloudinary://87463728:abcdefgh@namacloudkamu']);
-
             $imagePath = null;
             if ($request->hasFile('image')) {
                 try {
-                    // Upload
+                    // Upload ke Cloudinary (Config diambil otomatis dari .env)
                     $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
                         'folder' => 'getcha_products'
                     ]);
                     $imagePath = $uploadedFile->getSecurePath();
                 } catch (\Exception $e) {
-                    // Kalau upload gagal, kita pakai gambar dummy biar GAK ERROR
                     Log::error("Cloudinary Error: " . $e->getMessage());
-                    $imagePath = 'https://placehold.co/600x400?text=Upload+Failed';
+                    // Jika gagal, throw error agar transaksi dibatalkan dan frontend tau errornya
+                    throw new \Exception("Gagal upload gambar ke Cloudinary: " . $e->getMessage());
                 }
             }
 
@@ -72,7 +64,7 @@ class ProductController extends Controller
                 'is_promo' => filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             ]);
 
-            // Save Variants (Versi Paling Aman)
+            // Save Variants
             $variants = $this->parseJsonField($request->variants);
             if (!empty($variants) && is_array($variants)) {
                 foreach ($variants as $variant) {
@@ -87,7 +79,7 @@ class ProductController extends Controller
                 }
             }
 
-            // Save Modifiers (Versi Paling Aman)
+            // Save Modifiers
             $modifiers = $this->parseJsonField($request->modifiers);
             if (!empty($modifiers) && is_array($modifiers)) {
                 foreach ($modifiers as $mod) {
@@ -140,9 +132,6 @@ class ProductController extends Controller
         try {
             DB::beginTransaction();
 
-            // 🔥 FORCE CONFIG JUGA DISINI
-            config(['cloudinary.cloud_url' => 'MASUKKAN_URL_CLOUDINARY_DISINI']);
-
             $imagePath = $product->image;
             if ($request->hasFile('image')) {
                 try {
@@ -151,7 +140,8 @@ class ProductController extends Controller
                     ]);
                     $imagePath = $uploadedFile->getSecurePath();
                 } catch (\Exception $e) {
-                     Log::error("Cloudinary Update Error: " . $e->getMessage());
+                    Log::error("Cloudinary Update Error: " . $e->getMessage());
+                    throw new \Exception("Gagal upload gambar baru ke Cloudinary.");
                 }
             }
 
