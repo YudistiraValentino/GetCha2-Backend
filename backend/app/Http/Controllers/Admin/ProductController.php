@@ -10,7 +10,6 @@ use App\Models\ProductVariant;
 use App\Models\ProductModifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class ProductController extends Controller
 {
@@ -28,31 +27,30 @@ class ProductController extends Controller
 
     public function store(Request $request)
     {
-        Log::info('CREATE PRODUCT REQUEST:', $request->all());
+        Log::info('CREATE PRODUCT SIMPLIFIED:', $request->all());
 
         $request->validate([
             'name' => 'required',
             'price' => 'required',
-            'image' => 'required|image|max:10240', // Max 10MB
+            'category_id' => 'required',
         ]);
 
         try {
             DB::beginTransaction();
 
-            $imagePath = null;
-            if ($request->hasFile('image')) {
-                try {
-                    // Upload ke Cloudinary (Config diambil otomatis dari .env)
-                    $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
-                        'folder' => 'getcha_products'
-                    ]);
-                    $imagePath = $uploadedFile->getSecurePath();
-                } catch (\Exception $e) {
-                    Log::error("Cloudinary Error: " . $e->getMessage());
-                    // Jika gagal, throw error agar transaksi dibatalkan dan frontend tau errornya
-                    throw new \Exception("Gagal upload gambar ke Cloudinary: " . $e->getMessage());
-                }
+            // LOGIKA GAMBAR OTOMATIS BERDASARKAN KATEGORI
+            // Diasumsikan: ID 1=Coffee, 2=Non-Coffee, 3=Food, 4=Snack
+            $imageName = 'food.jpg'; // Default
+
+            $catId = $request->category_id;
+            if ($catId == 1 || $catId == 2) {
+                $imageName = 'coffee.jpg';
+            } elseif ($catId == 4) {
+                $imageName = 'snack.jpg';
             }
+
+            // Simpan path relatif yang akan dibaca Next.js dari folder public-nya
+            $imagePath = '/images/products/' . $imageName;
 
             $product = Product::create([
                 'name' => $request->name,
@@ -66,14 +64,13 @@ class ProductController extends Controller
 
             // Save Variants
             $variants = $this->parseJsonField($request->variants);
-            if (!empty($variants) && is_array($variants)) {
+            if (!empty($variants)) {
                 foreach ($variants as $variant) {
-                    $vName = data_get($variant, 'name');
-                    if (!empty($vName)) {
+                    if (!empty(data_get($variant, 'name'))) {
                         ProductVariant::create([
                             'product_id' => $product->id,
-                            'name' => $vName,
-                            'price' => data_get($variant, 'price') ?? $product->price,
+                            'name' => $variant['name'],
+                            'price' => $variant['price'] ?? $product->price,
                         ]);
                     }
                 }
@@ -81,29 +78,14 @@ class ProductController extends Controller
 
             // Save Modifiers
             $modifiers = $this->parseJsonField($request->modifiers);
-            if (!empty($modifiers) && is_array($modifiers)) {
+            if (!empty($modifiers)) {
                 foreach ($modifiers as $mod) {
-                    $mName = data_get($mod, 'name');
-                    if (!empty($mName)) {
-                        $cleanOptions = [];
-                        $rawOptions = data_get($mod, 'options');
-                        if (is_array($rawOptions)) {
-                            foreach ($rawOptions as $opt) {
-                                $oLabel = data_get($opt, 'label');
-                                if (!empty($oLabel)) {
-                                    $cleanOptions[] = [
-                                        'label' => $oLabel,
-                                        'priceChange' => data_get($opt, 'price') ?? 0,
-                                        'isDefault' => filter_var(data_get($opt, 'default'), FILTER_VALIDATE_BOOLEAN)
-                                    ];
-                                }
-                            }
-                        }
+                    if (!empty(data_get($mod, 'name'))) {
                         ProductModifier::create([
                             'product_id' => $product->id,
-                            'name' => $mName,
+                            'name' => $mod['name'],
                             'is_required' => filter_var(data_get($mod, 'required'), FILTER_VALIDATE_BOOLEAN),
-                            'options' => $cleanOptions
+                            'options' => data_get($mod, 'options') ?? []
                         ]);
                     }
                 }
@@ -124,89 +106,36 @@ class ProductController extends Controller
         $product = Product::find($id);
         if (!$product) return response()->json(['success' => false, 'message' => 'Product not found'], 404);
 
-        $request->validate([
-            'name' => 'required',
-            'price' => 'required',
-        ]);
-
         try {
             DB::beginTransaction();
 
-            $imagePath = $product->image;
-            if ($request->hasFile('image')) {
-                try {
-                    $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
-                        'folder' => 'getcha_products'
-                    ]);
-                    $imagePath = $uploadedFile->getSecurePath();
-                } catch (\Exception $e) {
-                    Log::error("Cloudinary Update Error: " . $e->getMessage());
-                    throw new \Exception("Gagal upload gambar baru ke Cloudinary.");
-                }
-            }
-
+            // Update data dasar
             $product->update([
-                'name' => $request->name,
-                'category_id' => $request->category_id,
-                'description' => $request->description,
-                'price' => $request->price,
-                'image' => $imagePath,
-                'is_promo' => filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
+                'name' => $request->name ?? $product->name,
+                'category_id' => $request->category_id ?? $product->category_id,
+                'description' => $request->description ?? $product->description,
+                'price' => $request->price ?? $product->price,
+                'is_promo' => $request->has('is_promo') ? (filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0) : $product->is_promo,
             ]);
 
-            // Update Variants
-            $product->variants()->delete();
-            $variants = $this->parseJsonField($request->variants);
-            if (!empty($variants) && is_array($variants)) {
+            // Sync Variants & Modifiers (Delete then Re-create)
+            if ($request->has('variants')) {
+                $product->variants()->delete();
+                $variants = $this->parseJsonField($request->variants);
                 foreach ($variants as $variant) {
-                    $vName = data_get($variant, 'name');
-                    if (!empty($vName)) {
-                        ProductVariant::create([
-                            'product_id' => $product->id,
-                            'name' => $vName,
-                            'price' => data_get($variant, 'price') ?? $product->price,
-                        ]);
-                    }
-                }
-            }
-
-            // Update Modifiers
-            $product->modifiers()->delete();
-            $modifiers = $this->parseJsonField($request->modifiers);
-            if (!empty($modifiers) && is_array($modifiers)) {
-                foreach ($modifiers as $mod) {
-                    $mName = data_get($mod, 'name');
-                    if (!empty($mName)) {
-                        $cleanOptions = [];
-                        $rawOptions = data_get($mod, 'options');
-                        if (is_array($rawOptions)) {
-                            foreach ($rawOptions as $opt) {
-                                $oLabel = data_get($opt, 'label');
-                                if (!empty($oLabel)) {
-                                    $cleanOptions[] = [
-                                        'label' => $oLabel,
-                                        'priceChange' => data_get($opt, 'price') ?? 0,
-                                        'isDefault' => filter_var(data_get($opt, 'default'), FILTER_VALIDATE_BOOLEAN)
-                                    ];
-                                }
-                            }
-                        }
-                        ProductModifier::create([
-                            'product_id' => $product->id,
-                            'name' => $mName,
-                            'is_required' => filter_var(data_get($mod, 'required'), FILTER_VALIDATE_BOOLEAN),
-                            'options' => $cleanOptions
-                        ]);
-                    }
+                    ProductVariant::create([
+                        'product_id' => $product->id,
+                        'name' => $variant['name'],
+                        'price' => $variant['price'] ?? $product->price,
+                    ]);
                 }
             }
 
             DB::commit();
-            return response()->json(['success' => true, 'message' => 'Produk berhasil diupdate!', 'data' => $product]);
-
+            return response()->json(['success' => true, 'message' => 'Produk diupdate!', 'data' => $product]);
         } catch (\Exception $e) {
             DB::rollback();
-            return response()->json(['success' => false, 'message' => 'Gagal update: ' . $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 
@@ -214,7 +143,7 @@ class ProductController extends Controller
     {
         $product = Product::find($id);
         if ($product) $product->delete();
-        return response()->json(['success' => true, 'message' => 'Produk berhasil dihapus!']);
+        return response()->json(['success' => true, 'message' => 'Produk dihapus!']);
     }
 
     private function parseJsonField($field)
