@@ -18,6 +18,8 @@ class User extends Authenticatable
         'password',
         'role',    
         'points',
+        'otp',              // 👈 Tambah
+        'otp_expires_at',
     ];
 
     protected $hidden = [

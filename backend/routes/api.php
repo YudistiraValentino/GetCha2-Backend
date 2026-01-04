@@ -22,7 +22,7 @@ use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes (OPEN MAP VERSION)
+| API Routes (OPEN MAP VERSION + OTP + DASHBOARD)
 |--------------------------------------------------------------------------
 */
 
@@ -39,6 +39,10 @@ Route::post('/promos/apply', [PromoController::class, 'apply']);
 // AUTH Public
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']); 
+
+// 🔥 ROUTE BARU: VERIFY OTP (Public)
+Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp']); 
+
 Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
 // Active Map (Public View)
@@ -62,17 +66,16 @@ Route::get('/active-map', function () {
 // 🔓 2. MAPS ROUTES (VIP - NO AUTH)
 // ==========================================
 // 🔥 KITA TARUH DISINI (DILUAR MIDDLEWARE)
-// Supaya upload map tidak kena Error 401 lagi.
 Route::prefix('admin')->group(function () {
     Route::get('/maps', [AdminMapController::class, 'index']);
-    Route::post('/maps', [AdminMapController::class, 'store']); // 👈 Upload Bebas Hambatan
+    Route::post('/maps', [AdminMapController::class, 'store']); 
     Route::post('/maps/{id}/activate', [AdminMapController::class, 'activate']);
     Route::delete('/maps/{id}', [AdminMapController::class, 'destroy']);
 });
 
 
 // ==========================================
-// 🔒 3. SECURE ROUTES (Sisa Admin Lainnya)
+// 🔒 3. SECURE ROUTES (Admin Dashboard)
 // ==========================================
 Route::middleware(['simple.auth', 'is_admin'])->prefix('admin')->group(function () {
     
@@ -82,6 +85,9 @@ Route::middleware(['simple.auth', 'is_admin'])->prefix('admin')->group(function 
 
     Route::post('/logout', [AdminAuthController::class, 'logout']);
 
+    // 🔥 Dashboard Stats
+    Route::get('/dashboard-stats', [AdminOrderController::class, 'getDashboardStats']);
+
     // Products
     Route::apiResource('products', AdminProductController::class);
     
@@ -89,8 +95,9 @@ Route::middleware(['simple.auth', 'is_admin'])->prefix('admin')->group(function 
     Route::get('/orders', [AdminOrderController::class, 'index']);
     Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
     Route::put('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
+    Route::delete('/orders/{id}', [AdminOrderController::class, 'destroy']); 
     
-    // Promos (Tetap dikunci karena pakai text biasa, server jarang reject)
+    // Promos
     Route::apiResource('promos', AdminPromoController::class);
 
     // Users
