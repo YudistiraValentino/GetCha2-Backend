@@ -11,8 +11,6 @@ use Illuminate\Database\Schema\Blueprint;
 |--------------------------------------------------------------------------
 | Web Routes (Emergency Tools Only)
 |--------------------------------------------------------------------------
-| File ini HANYA untuk tools perbaikan database via browser.
-| Jangan taruh logika Admin Dashboard di sini (karena butuh CSRF).
 */
 
 Route::get('/', function () {
@@ -21,6 +19,20 @@ Route::get('/', function () {
         'info' => 'Use /api endpoints for application data.'
     ]);
 });
+
+// ==========================================
+// 🛡️ JARING PENGAMAN (SOLUSI ERROR 500 / Route Not Found)
+// ==========================================
+// Laravel butuh rute bernama 'login' untuk melempar user yang belum auth.
+// Kita buat rute ini mengembalikan JSON 401 supaya tidak crash.
+
+Route::get('/login', function () {
+    return response()->json([
+        'success' => false,
+        'message' => 'Unauthenticated. Token Invalid or Expired. Please login via API.'
+    ], 401);
+})->name('login'); // 👈 NAMA INI WAJIB ADA
+
 
 // ==========================================
 // 🛠️ EMERGENCY TOOLS (DANGER ZONE)
