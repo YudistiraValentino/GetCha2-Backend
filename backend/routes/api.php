@@ -22,12 +22,12 @@ use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes (CLEAN & FIXED)
+| API Routes (OPEN MAP VERSION)
 |--------------------------------------------------------------------------
 */
 
 // ==========================================
-// 🔓 1. PUBLIC ROUTES
+// 🔓 1. PUBLIC ROUTES (Customer)
 // ==========================================
 Route::get('/menu', [MenuController::class, 'index']);
 Route::get('/menu/{id}', [MenuController::class, 'show']);
@@ -39,11 +39,9 @@ Route::post('/promos/apply', [PromoController::class, 'apply']);
 // AUTH Public
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']); 
-
-// 🔥 ADMIN LOGIN
 Route::post('/admin/login', [AdminAuthController::class, 'login']);
 
-// Active Map
+// Active Map (Public View)
 Route::get('/active-map', function () {
     $map = FloorPlan::where('is_active', true)->first();
     if (!$map) return response()->json(['success' => false, 'message' => 'No active map']);
@@ -61,23 +59,21 @@ Route::get('/active-map', function () {
 });
 
 // ==========================================
-// 🔒 2. USER ROUTES
+// 🔓 2. MAPS ROUTES (VIP - NO AUTH)
 // ==========================================
-// Middleware simple.auth untuk user biasa
-Route::middleware('simple.auth')->group(function () {
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
-    Route::post('/logout', [AuthController::class, 'logout']);
-    Route::get('/my-orders', [OrderController::class, 'index']);
-    Route::put('/profile/update', [ProfileController::class, 'update']);
-    Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
+// 🔥 KITA TARUH DISINI (DILUAR MIDDLEWARE)
+// Supaya upload map tidak kena Error 401 lagi.
+Route::prefix('admin')->group(function () {
+    Route::get('/maps', [AdminMapController::class, 'index']);
+    Route::post('/maps', [AdminMapController::class, 'store']); // 👈 Upload Bebas Hambatan
+    Route::post('/maps/{id}/activate', [AdminMapController::class, 'activate']);
+    Route::delete('/maps/{id}', [AdminMapController::class, 'destroy']);
 });
 
+
 // ==========================================
-// 👑 3. ADMIN ROUTES
+// 🔒 3. SECURE ROUTES (Sisa Admin Lainnya)
 // ==========================================
-// Middleware simple.auth + is_admin
 Route::middleware(['simple.auth', 'is_admin'])->prefix('admin')->group(function () {
     
     Route::get('/check', function() {
@@ -86,25 +82,30 @@ Route::middleware(['simple.auth', 'is_admin'])->prefix('admin')->group(function 
 
     Route::post('/logout', [AdminAuthController::class, 'logout']);
 
-    // --- PRODUCTS ---
+    // Products
     Route::apiResource('products', AdminProductController::class);
     
-    // --- ORDERS ---
+    // Orders
     Route::get('/orders', [AdminOrderController::class, 'index']);
     Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
     Route::put('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
     
-    // --- PROMOS ---
+    // Promos (Tetap dikunci karena pakai text biasa, server jarang reject)
     Route::apiResource('promos', AdminPromoController::class);
 
-    // --- USERS ---
+    // Users
     Route::get('/users', [AdminUserController::class, 'index']);
     Route::get('/users/{id}/stats', [AdminUserController::class, 'getUserStats']);
     Route::post('/users/{id}/points', [AdminUserController::class, 'updatePoints']);
+});
 
-    // --- MAPS ---
-    Route::get('/maps', [AdminMapController::class, 'index']);
-    Route::post('/maps', [AdminMapController::class, 'store']);
-    Route::post('/maps/{id}/activate', [AdminMapController::class, 'activate']);
-    Route::delete('/maps/{id}', [AdminMapController::class, 'destroy']);
+// User App Routes
+Route::middleware('simple.auth')->group(function () {
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/my-orders', [OrderController::class, 'index']);
+    Route::put('/profile/update', [ProfileController::class, 'update']);
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
 });
