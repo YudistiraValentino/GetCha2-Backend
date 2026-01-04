@@ -16,12 +16,18 @@ use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class ProductController extends Controller
 {
+    /**
+     * GET ALL PRODUCTS
+     */
     public function index()
     {
         $products = Product::with(['category', 'variants', 'modifiers'])->latest()->get();
         return response()->json(['success' => true, 'data' => $products]);
     }
 
+    /**
+     * GET SINGLE PRODUCT
+     */
     public function show($id)
     {
         $product = Product::with(['category', 'variants', 'modifiers'])->find($id);
@@ -29,9 +35,12 @@ class ProductController extends Controller
         return response()->json(['success' => true, 'data' => $product]);
     }
 
+    /**
+     * STORE (CREATE) PRODUCT
+     */
     public function store(Request $request)
     {
-        // 1. LOG DATA (Biar ketahuan kalau frontend kirim data aneh)
+        // 1. LOG DATA (Biar ketahuan di Logs Railway apa yang dikirim Frontend)
         Log::info('CREATE PRODUCT REQUEST:', $request->all());
 
         $request->validate([
@@ -44,9 +53,10 @@ class ProductController extends Controller
         try {
             DB::beginTransaction();
 
-            // 2. Handle Upload Image
+            // 2. Handle Upload Image (Cloudinary)
             $imagePath = null;
             if ($request->hasFile('image')) {
+                // Upload ke folder 'getcha_products'
                 $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
                     'folder' => 'getcha_products'
                 ]);
@@ -64,11 +74,11 @@ class ProductController extends Controller
                 'is_promo' => filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             ]);
 
-            // 4. Simpan Variants (PAKAI DATA_GET - LEBIH SAKTI 🛡️)
+            // 4. Simpan Variants (MENGGUNAKAN DATA_GET AGAR TIDAK ERROR NULL)
             $variants = $this->parseJsonField($request->variants);
             if (!empty($variants) && is_array($variants)) {
                 foreach ($variants as $variant) {
-                    // Pakai data_get() biar gak crash kalau $variant null
+                    // Ambil data dengan aman. Jika null, return null (tidak crash)
                     $vName = data_get($variant, 'name'); 
                     $vPrice = data_get($variant, 'price');
 
@@ -82,7 +92,7 @@ class ProductController extends Controller
                 }
             }
 
-            // 5. Simpan Modifiers (PAKAI DATA_GET - LEBIH SAKTI 🛡️)
+            // 5. Simpan Modifiers (MENGGUNAKAN DATA_GET AGAR TIDAK ERROR NULL)
             $modifiers = $this->parseJsonField($request->modifiers);
             if (!empty($modifiers) && is_array($modifiers)) {
                 foreach ($modifiers as $mod) {
@@ -90,7 +100,7 @@ class ProductController extends Controller
                     
                     if (!empty($mName)) {
                         $cleanOptions = [];
-                        $rawOptions = data_get($mod, 'options'); // Ambil options dengan aman
+                        $rawOptions = data_get($mod, 'options'); // Ambil array options
 
                         if (is_array($rawOptions)) {
                             foreach ($rawOptions as $opt) {
@@ -126,8 +136,9 @@ class ProductController extends Controller
 
         } catch (\Exception $e) {
             DB::rollback();
-            // Log Error lengkap biar kita tau baris ke berapa
+            // Log Error lengkap dengan nomor baris
             Log::error("GAGAL STORE PRODUCT: " . $e->getMessage() . ' - Line: ' . $e->getLine());
+            
             return response()->json([
                 'success' => false, 
                 'message' => 'Gagal membuat produk: ' . $e->getMessage()
@@ -135,9 +146,12 @@ class ProductController extends Controller
         }
     }
 
+    /**
+     * UPDATE PRODUCT
+     */
     public function update(Request $request, $id)
     {
-        Log::info('UPDATE PRODUCT REQUEST:', $request->all()); // Log buat debugging
+        Log::info('UPDATE PRODUCT REQUEST:', $request->all());
 
         $product = Product::find($id);
         if (!$product) return response()->json(['success' => false, 'message' => 'Product not found'], 404);
@@ -152,6 +166,7 @@ class ProductController extends Controller
         try {
             DB::beginTransaction();
 
+            // Handle Image Update
             $imagePath = $product->image;
             if ($request->hasFile('image')) {
                 $uploadedFile = Cloudinary::upload($request->file('image')->getRealPath(), [
@@ -169,7 +184,7 @@ class ProductController extends Controller
                 'is_promo' => filter_var($request->is_promo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             ]);
 
-            // Update Variants
+            // Update Variants (Delete Old -> Create New)
             $product->variants()->delete();
             $variants = $this->parseJsonField($request->variants);
             if (!empty($variants) && is_array($variants)) {
@@ -185,7 +200,7 @@ class ProductController extends Controller
                 }
             }
 
-            // Update Modifiers
+            // Update Modifiers (Delete Old -> Create New)
             $product->modifiers()->delete();
             $modifiers = $this->parseJsonField($request->modifiers);
             if (!empty($modifiers) && is_array($modifiers)) {
@@ -228,6 +243,9 @@ class ProductController extends Controller
         }
     }
 
+    /**
+     * DELETE PRODUCT
+     */
     public function destroy($id)
     {
         $product = Product::find($id);
@@ -241,6 +259,9 @@ class ProductController extends Controller
         }
     }
 
+    /**
+     * HELPER: Parse JSON String from Frontend
+     */
     private function parseJsonField($field)
     {
         if (is_string($field)) {
