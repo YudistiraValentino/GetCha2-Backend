@@ -14,34 +14,33 @@ class SimpleApiAuth
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // 1. Cek Header 'Authorization: Bearer ...' (Cara Normal)
+        // 1. Cek Header (Cara Normal)
         $token = $request->bearerToken();
 
-        // 2. 🔥 JALUR TIKUS (Cara Darurat buat Upload File)
-        // Kalau header kosong (dibuang server), cek apakah ada 'token' yang diselipkan di form-data
-        if (!$token) {
-            $token = $request->input('token');
-        }
+        // 2. Cek Body (Cara Tikus)
+        if (!$token) $token = $request->input('token');
 
-        // 3. Kalau masih gak nemu juga, baru tolak
+        // 3. 🔥 Cek URL Query Param (Cara NUKLIR - Anti Gagal)
+        // Contoh: /api/admin/maps?token=12345xxxxx
+        if (!$token) $token = $request->query('token');
+
+        // Validasi
         if (!$token) {
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthenticated. Header Token tidak ditemukan.'
+                'message' => 'Gagal: Unauthenticated. Token tidak ditemukan di Header, Body, maupun URL.'
             ], 401);
         }
 
-        // 4. Cek Token di Database
         $accessToken = PersonalAccessToken::findToken($token);
 
         if (!$accessToken || !$accessToken->tokenable) {
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthenticated. Token Invalid atau Kadaluarsa.'
+                'message' => 'Unauthenticated. Token Invalid.'
             ], 401);
         }
 
-        // 5. LOLOS! Login user
         auth()->login($accessToken->tokenable);
 
         return $next($request);
