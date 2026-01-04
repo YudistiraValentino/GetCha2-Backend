@@ -4,7 +4,6 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use Illuminate\Auth\AuthenticationException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,29 +14,18 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         
-        // Daftarkan Alias Middleware
+        // 🔥 DAFTARKAN MIDDLEWARE BARU DISINI
         $middleware->alias([
             'is_admin' => \App\Http\Middleware\IsAdmin::class,
+            'simple.auth' => \App\Http\Middleware\SimpleApiAuth::class, // 👈 INI DIA
         ]);
 
-        // 🔥 SOLUSI 1: Jangan redirect jika request datang dari API
+        // Biar API gak redirect ke login page HTML
         $middleware->redirectGuestsTo(function (Request $request) {
-            if ($request->is('api/*')) {
-                return null; // Ini akan memicu AuthenticationException
-            }
+            if ($request->is('api/*')) return null;
             return route('login');
         });
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        
-        // 🔥 SOLUSI 2: Jika Token Salah/Kosong, Paksa Response JSON (Bukan Redirect)
-        $exceptions->render(function (AuthenticationException $e, Request $request) {
-            if ($request->is('api/*')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Unauthenticated. Token Invalid or Expired.',
-                ], 401);
-            }
-        });
-
+        //
     })->create();

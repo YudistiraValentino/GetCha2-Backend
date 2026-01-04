@@ -22,12 +22,12 @@ use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes (SECURE ADMIN VERSION)
+| API Routes (SIMPLE AUTH VERSION)
 |--------------------------------------------------------------------------
 */
 
 // ==========================================
-// 🔓 1. PUBLIC ROUTES (Bebas Akses)
+// 🔓 1. PUBLIC ROUTES (Bebas)
 // ==========================================
 Route::get('/menu', [MenuController::class, 'index']);
 Route::get('/menu/{id}', [MenuController::class, 'show']);
@@ -39,12 +39,9 @@ Route::post('/promos/apply', [PromoController::class, 'apply']);
 // AUTH Public
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/admin/login', [AdminAuthController::class, 'login']); // Admin Login
 
-// 🔥 ADMIN LOGIN (WAJIB DITARUH DILUAR MIDDLEWARE)
-// Ini pintunya. Kalau ini dikunci, admin gak bisa masuk buat ambil token.
-Route::post('/admin/login', [AdminAuthController::class, 'login']);
-
-// Active Map (Public View)
+// Active Map
 Route::get('/active-map', function () {
     $map = FloorPlan::where('is_active', true)->first();
     if (!$map) return response()->json(['success' => false, 'message' => 'No active map']);
@@ -62,9 +59,9 @@ Route::get('/active-map', function () {
 });
 
 // ==========================================
-// 🔒 2. USER ROUTES (Wajib Login)
+// 🔒 2. USER ROUTES (Pakai simple.auth juga biar konsisten)
 // ==========================================
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('simple.auth')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
@@ -75,39 +72,35 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // ==========================================
-// 👑 3. ADMIN ROUTES (DIKUNCI / WAJIB LOGIN)
+// 👑 3. ADMIN ROUTES (SECURE & STABLE)
 // ==========================================
-// Semua route di bawah ini butuh Token 'Bearer ...'
-// Kalau token salah/kosong, server akan menolak (401).
+// 🔥 Kita pakai 'simple.auth' pengganti 'auth:sanctum'
+// 🔥 Kita pakai 'is_admin' buat ngecek role
 
-Route::middleware(['auth:sanctum', 'is_admin'])->prefix('admin')->group(function () {
+Route::middleware(['simple.auth', 'is_admin'])->prefix('admin')->group(function () {
     
-    // Cek Token
     Route::get('/check', function() {
         return response()->json(['status' => 'OK', 'user' => auth()->user()]);
     });
 
     Route::post('/logout', [AdminAuthController::class, 'logout']);
 
-    // --- PRODUCTS ---
+    // CRUD DATA
     Route::apiResource('products', AdminProductController::class);
-
-    // --- ORDERS ---
+    
     Route::get('/orders', [AdminOrderController::class, 'index']);
     Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
     Route::put('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
     
-    // --- PROMOS ---
     Route::apiResource('promos', AdminPromoController::class);
 
-    // --- USERS ---
     Route::get('/users', [AdminUserController::class, 'index']);
     Route::get('/users/{id}/stats', [AdminUserController::class, 'getUserStats']);
     Route::post('/users/{id}/points', [AdminUserController::class, 'updatePoints']);
 
-    // --- MAPS ---
+    // MAPS
     Route::get('/maps', [AdminMapController::class, 'index']);
-    Route::post('/maps', [AdminMapController::class, 'store']); 
+    Route::post('/maps', [AdminMapController::class, 'store']);
     Route::post('/maps/{id}/activate', [AdminMapController::class, 'activate']);
     Route::delete('/maps/{id}', [AdminMapController::class, 'destroy']);
 });
