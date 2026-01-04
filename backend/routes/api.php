@@ -20,9 +20,13 @@ use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\FloorPlanController as AdminMapController;
 use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 
+// --- LIBRARY UNTUK PERBAIKAN DB ---
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
+
 /*
 |--------------------------------------------------------------------------
-| API Routes (OPEN MAP VERSION + OTP + DASHBOARD)
+| API Routes (OPEN MAP VERSION + OTP + DASHBOARD + EMERGENCY FIX)
 |--------------------------------------------------------------------------
 */
 
@@ -115,4 +119,39 @@ Route::middleware('simple.auth')->group(function () {
     Route::get('/my-orders', [OrderController::class, 'index']);
     Route::put('/profile/update', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
+});
+
+// ==========================================
+// 🚑 4. EMERGENCY DATABASE FIXER (Hapus setelah dipakai)
+// ==========================================
+Route::get('/emergency-fix-db', function() {
+    try {
+        Schema::table('users', function (Blueprint $table) {
+            // Cek apakah kolom 'otp' sudah ada? Kalau belum, buatkan!
+            if (!Schema::hasColumn('users', 'otp')) {
+                $table->string('otp')->nullable()->after('points');
+            }
+            
+            // Cek apakah kolom 'otp_expires_at' sudah ada? Kalau belum, buatkan!
+            if (!Schema::hasColumn('users', 'otp_expires_at')) {
+                $table->timestamp('otp_expires_at')->nullable()->after('otp');
+            }
+
+             // Cek username sekalian
+            if (!Schema::hasColumn('users', 'username')) {
+                $table->string('username')->nullable()->after('email');
+            }
+        });
+        
+        return response()->json([
+            'success' => true, 
+            'message' => 'ALHAMDULILLAH! Database berhasil diperbaiki. Kolom OTP sudah ditambahkan.'
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false, 
+            'message' => 'Gagal memperbaiki: ' . $e->getMessage()
+        ]);
+    }
 });
