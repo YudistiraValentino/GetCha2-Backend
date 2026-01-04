@@ -1,11 +1,12 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Models\User; 
+use App\Models\User;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB; 
-use Illuminate\Support\Facades\Hash; 
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Artisan;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,27 +16,58 @@ use Illuminate\Database\Schema\Blueprint;
 
 Route::get('/', function () {
     return response()->json([
-        'status' => 'Backend API is Running', 
+        'status' => 'Backend API is Running',
         'info' => 'Use /api endpoints for application data.'
     ]);
 });
 
 // ==========================================
-// 🛡️ JARING PENGAMAN (SOLUSI ERROR 500 / Route Not Found)
+// 🛡️ JARING PENGAMAN (SOLUSI ERROR 500)
 // ==========================================
-// Laravel butuh rute bernama 'login' untuk melempar user yang belum auth.
-// Kita buat rute ini mengembalikan JSON 401 supaya tidak crash.
-
 Route::get('/login', function () {
     return response()->json([
         'success' => false,
         'message' => 'Unauthenticated. Token Invalid or Expired. Please login via API.'
     ], 401);
-})->name('login'); // 👈 NAMA INI WAJIB ADA
+})->name('login');
 
 
 // ==========================================
-// 🛠️ EMERGENCY TOOLS (DANGER ZONE)
+// ☁️ CLOUDINARY & SERVER DEBUGGER (BARU)
+// ==========================================
+
+// 1. Cek apakah Cloudinary URL terbaca oleh Laravel
+Route::get('/debug-cloudinary', function () {
+    $env = env('CLOUDINARY_URL');
+    $config = config('cloudinary.cloud_url');
+
+    // Kita sensor passwordnya biar aman kalau dilihat orang
+    $maskedEnv = $env ? preg_replace('/(:)([^@]+)(@)/', ':********@', $env) : 'KOSONG / TIDAK TERBACA';
+
+    return [
+        '1_env_check' => $env ? '✅ Ada di ENV' : '❌ Tidak ada di ENV',
+        '2_config_check' => $config ? '✅ Terbaca oleh Config' : '❌ Config NULL (Jalankan /clear-cache)',
+        '3_value_masked' => $maskedEnv,
+        '4_info' => 'Jika Env ada tapi Config NULL, jalankan route /clear-cache sekarang.'
+    ];
+});
+
+// 2. Hapus Cache (PENTING SETELAH GANTI VARIABLE DI RAILWAY)
+Route::get('/clear-cache', function () {
+    try {
+        Artisan::call('config:clear');
+        Artisan::call('cache:clear');
+        Artisan::call('view:clear');
+        Artisan::call('route:clear');
+        return "✅ Cache Berhasil Dibersihkan! Settingan .env baru sudah aktif.";
+    } catch (\Exception $e) {
+        return "❌ Gagal clear cache: " . $e->getMessage();
+    }
+});
+
+
+// ==========================================
+// 🛠️ EMERGENCY TOOLS (DATABASE FIXES)
 // ==========================================
 
 /**
@@ -162,7 +194,7 @@ Route::get('/fix-maps', function () {
 });
 
 /**
- * 5. FIX STORAGE
+ * 5. FIX STORAGE (LINK)
  */
 Route::get('/fix-storage', function () {
     try {
